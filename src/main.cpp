@@ -9,12 +9,17 @@
 cvar_t* sv_unlag;
 cvar_t* sv_maxunlag;
 cvar_t* sv_unlagpush;
+cvar_t hf_hitbox_fix = { "hbf_enabled", "1", FCVAR_SERVER | FCVAR_PROTECTED, 0.0f, NULL };
+cvar_t* phf_hitbox_fix;
+char g_ExecConfigCmd[MAX_PATH];
+const char CFG_FILE[] = "hbf.cfg";
 extern server_studio_api_t IEngineStudio;
 extern studiohdr_t* g_pstudiohdr;
 extern float(*g_pRotationMatrix)[3][4];
 extern float(*g_pBoneTransform)[128][3][4];
 void StudioProcessGait(int index);
-
+sv_blending_interface_s** orig_ppinterface;
+sv_blending_interface_s orig_interface;
 // Resource counts
 #define MAX_MODEL_INDEX_BITS		9	// sent as a short
 #define MAX_MODELS			(1<<MAX_MODEL_INDEX_BITS)
@@ -665,8 +670,10 @@ static bool Init = false;
 int (*Server_GetBlendingInterfaceOrig)(int version, struct sv_blending_interface_s** ppinterface, struct engine_studio_api_s* pstudio, float* rotationmatrix, float* bonetransform);
 int Server_GetBlendingInterface(int version, struct sv_blending_interface_s** ppinterface, struct engine_studio_api_s* pstudio, float* rotationmatrix, float* bonetransform)
 {
+	orig_ppinterface = ppinterface;
 	subhook_remove(Server_GetBlendingInterfaceHook);
 	Server_GetBlendingInterfaceOrig(version, ppinterface, pstudio, rotationmatrix, bonetransform);
+	orig_interface = **ppinterface;
 	subhook_install(Server_GetBlendingInterfaceHook);
 	if (version != SV_BLENDING_INTERFACE_VERSION)
 		return 0;
@@ -684,6 +691,56 @@ int Server_GetBlendingInterface(int version, struct sv_blending_interface_s** pp
 	return 1;
 }
 
+void Revoice_Exec_Config()
+{
+	if (!g_ExecConfigCmd[0]) {
+		return;
+	}
+
+	g_engfuncs.pfnServerCommand(g_ExecConfigCmd);
+	g_engfuncs.pfnServerExecute();
+}
+
+void NormalizePath(char* path)
+{
+	for (char* cp = path; *cp; cp++) {
+		if (isupper(*cp))
+			*cp = tolower(*cp);
+
+		if (*cp == '\\')
+			*cp = '/';
+	}
+}
+
+void HF_Exec_Config()
+{
+	if (!g_ExecConfigCmd[0]) {
+		return;
+	}
+
+	g_engfuncs.pfnServerCommand(g_ExecConfigCmd);
+	g_engfuncs.pfnServerExecute();
+}
+
+bool HF_Init_Config()
+{
+	const char* pszGameDir = GET_GAME_INFO(PLID, GINFO_GAMEDIR);
+	const char* pszPluginDir = GET_PLUGIN_PATH(PLID);
+
+	char szRelativePath[MAX_PATH];
+	strncpy(szRelativePath, &pszPluginDir[strlen(pszGameDir) + 1], sizeof(szRelativePath) - 1);
+	szRelativePath[sizeof(szRelativePath) - 1] = '\0';
+	NormalizePath(szRelativePath);
+
+	char* pos = strrchr(szRelativePath, '/');
+	if (pos) {
+		*(pos + 1) = '\0';
+	}
+
+	snprintf(g_ExecConfigCmd, sizeof(g_ExecConfigCmd), "exec \"%s%s\"\n", szRelativePath, CFG_FILE);
+	return true;
+}
+
 bool OnMetaAttach()
 {
 	if (Init)
@@ -697,7 +754,12 @@ bool OnMetaAttach()
 	sv_unlag = g_engfuncs.pfnCVarGetPointer("sv_unlag");
 	sv_maxunlag = g_engfuncs.pfnCVarGetPointer("sv_maxunlag");
 	sv_unlagpush = g_engfuncs.pfnCVarGetPointer("sv_unlagpush");
-	//engine_patcher = std::make_unique< CDynPatcher>();
+	CVAR_REGISTER(&hf_hitbox_fix);
+	phf_hitbox_fix = CVAR_GET_POINTER(hf_hitbox_fix.name);
+	HF_Init_Config();
+	HF_Exec_Config();
+	
+
 #if 1
 #if defined(__linux__) || defined(__APPLE__)
 	
@@ -705,7 +767,6 @@ bool OnMetaAttach()
 	ModuleInfo info = Handles::GetModuleInfo("cs.so");
 	Server_GetBlendingInterfaceOrig = decltype(Server_GetBlendingInterfaceOrig)(dlsym(info.handle, "Server_GetBlendingInterface"));
 
-	printf("[Hitbox Fix] Found Server_GetBlendingInterface at 0x%p\n", Server_GetBlendingInterfaceOrig);
 	Server_GetBlendingInterfaceHook = subhook_new(
 		(void*)Server_GetBlendingInterfaceOrig, (void*)Server_GetBlendingInterface, (subhook_flags_t)0);
 	subhook_install(Server_GetBlendingInterfaceHook);
@@ -728,5 +789,6 @@ bool OnMetaAttach()
 
 void OnMetaDetach()
 {
-
+	subhook_remove(Server_GetBlendingInterfaceHook);
+	(*orig_ppinterface)->SV_StudioSetupBones = orig_interface.SV_StudioSetupBones;
 }

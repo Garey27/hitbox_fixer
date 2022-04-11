@@ -892,6 +892,11 @@ void SV_StudioSetupBones(model_t* pModel, float frame, int sequence, const vec_t
 	static float pos4[MAXSTUDIOBONES][3];
 	static vec4_t q4[MAXSTUDIOBONES];
 
+	if (!phf_hitbox_fix->value)
+	{
+		orig_interface.SV_StudioSetupBones(pModel, frame, sequence, angles, origin, pcontroller, pblending, iBone, pEdict);
+		return;
+	}
 	
 	if (ENTINDEX(pEdict) <= g_RehldsSvs->GetMaxClients())
 	{

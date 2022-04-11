@@ -90,7 +90,7 @@ else()
     #set(CMAKE_CXX_STANDARD 14)
     #set(CMAKE_CXX_STANDARD_REQUIRED ON)
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -m32")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -static-intel -static-libstdc++ -static-libgcc")
     set_target_properties(HitboxFix PROPERTIES COMPILE_FLAGS "-m32" LINK_FLAGS "-m32" POSITION_INDEPENDENT_CODE ON)
 
 endif()

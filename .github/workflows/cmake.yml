@@ -82,7 +82,7 @@ jobs:
       - name: Archive artifacts
         run: |
           mkdir -p addons/hitbox_fix
-          cp hitbox_fix_mm.dll hitbox_fix_mm_i386.so addons/hitbox_fix
+          cp dist/hbf.cfg hitbox_fix_mm.dll hitbox_fix_mm_i386.so addons/hitbox_fix
           7z a -tzip hitbox_fix-bin-${RELEASE_VERSION}.zip addons
         
       - name: Release

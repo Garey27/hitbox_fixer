@@ -19,7 +19,7 @@ plugin_info_t Plugin_info =
 	"https://github.com/Garey27/hitbox_fixer",	// url
 	"HBFix",				// logtag, all caps please
 	PT_STARTUP,				// (when) loadable
-	PT_NEVER,				// (when) unloadable
+	PT_ANYTIME,				// (when) unloadable
 };
 
 C_DLLEXPORT int Meta_Query(char *interfaceVersion, plugin_info_t* *plinfo, mutil_funcs_t *pMetaUtilFuncs)
