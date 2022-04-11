@@ -691,16 +691,6 @@ int Server_GetBlendingInterface(int version, struct sv_blending_interface_s** pp
 	return 1;
 }
 
-void Revoice_Exec_Config()
-{
-	if (!g_ExecConfigCmd[0]) {
-		return;
-	}
-
-	g_engfuncs.pfnServerCommand(g_ExecConfigCmd);
-	g_engfuncs.pfnServerExecute();
-}
-
 void NormalizePath(char* path)
 {
 	for (char* cp = path; *cp; cp++) {
