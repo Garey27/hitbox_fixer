@@ -1,0 +1,7 @@
+// Format: [error id]:[filename]:[line]
+// The [filename] and [line] are optional.
+// If [error id] is a wildcard '*', all error ids match.
+
+shadowFunction
+shiftTooManyBitsSigned
+CastIntegerToAddressAtReturn
