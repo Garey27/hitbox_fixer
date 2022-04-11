@@ -16,7 +16,7 @@ plugin_info_t Plugin_info =
 	APP_VERSION,					// version
 	APP_COMMIT_DATE,				// date
 	"Garey",				// author
-	APP_COMMIT_URL,	// url
+	"https://github.com/Garey27/hitbox_fixer",	// url
 	"HBFix",				// logtag, all caps please
 	PT_STARTUP,				// (when) loadable
 	PT_NEVER,				// (when) unloadable
