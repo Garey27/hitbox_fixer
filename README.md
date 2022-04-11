@@ -1,7 +1,7 @@
 # Hitbox Fixer ![C/C++ CI](https://github.com/Garey27/hitbox_fixer/actions/workflows/cmake.yml/badge.svg)
 This module fixes incorrect player server-side hitboxes in Counter-Strike 1.6.
 ## Requirements
-* REHLDS version 3.11+
+* REHLDS version 3.11 or above
 ## Fixes
 - [x] Fixes absolutely broken hitboxes when numblends == 1 (ducking/standing in reload weapon or plant c4 animation).
 - [x] Hitbox backtrack based on client-side position.
