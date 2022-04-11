@@ -32,14 +32,20 @@ struct player_anim_params_hist_s
 {
 	player_anim_params_s hist[MULTIPLAYER_BACKUP][MAX_CLIENTS];
 };
-player_anim_params_hist_s player_params_history[MAX_CLIENTS];
-player_anim_params_s player_params[MAX_CLIENTS];
+player_anim_params_hist_s player_params_history[MAX_CLIENTS]{};
+player_anim_params_s player_params[MAX_CLIENTS]{};
 
 subhook_t Server_GetBlendingInterfaceHook;
 subhook_t SV_SendClientDatagramHook;
-void SV_DropClient_hook(IRehldsHook_SV_DropClient* chain, IGameClient* cl, bool crash, const char* msg)
+void (PutInServer)(edict_t* pEntity)
 {
-	chain->callNext(cl, crash, msg);
+	if (!pEntity)
+	{
+		RETURN_META(MRES_IGNORED);
+	}
+	auto host_id = ENTINDEX(pEntity) - 1;
+	memset(&player_params_history[host_id], 0, sizeof(player_params_history[host_id]));
+	RETURN_META(MRES_IGNORED);
 }
 
 void UTIL_ServerPrint(const char* fmt, ...)
@@ -53,34 +59,6 @@ void UTIL_ServerPrint(const char* fmt, ...)
 
 	SERVER_PRINT(string);
 }
-void CvarValue2_PreHook(const edict_t* pEnt, int requestID, const char* cvarName, const char* cvarValue)
-{
-	RETURN_META(MRES_IGNORED);
-}
-
-void Rehlds_HandleNetCommand(IRehldsHook_HandleNetCommand* chain, IGameClient* cl, int8 opcode)
-{
-
-	chain->callNext(cl, opcode);
-}
-
-qboolean ClientConnect_PostHook(edict_t* pEntity, const char* pszName, const char* pszAddress, char szRejectReason[128])
-{
-	RETURN_META_VALUE(MRES_IGNORED, TRUE);
-}
-
-void ServerActivate_PostHook(edict_t* pEdictList, int edictCount, int clientMax)
-{
-	SET_META_RESULT(MRES_IGNORED);
-}
-void ServerDeactivate_PostHook()
-{
-	SET_META_RESULT(MRES_IGNORED);
-}
-
-void SV_WriteVoiceCodec_hooked(IRehldsHook_SV_WriteVoiceCodec* chain, sizebuf_t* sb)
-{
-}
 
 void VectorMA(const vec_t* veca, float scale, const vec_t* vecm, vec_t* out)
 {
@@ -89,30 +67,6 @@ void VectorMA(const vec_t* veca, float scale, const vec_t* vecm, vec_t* out)
 	out[2] = scale * vecm[2] + veca[2];
 }
 
-int SV_UnlagCheckTeleport(vec_t* v1, vec_t* v2)
-{
-	for (int i = 0; i < 3; i++)
-	{
-		if (fabs(v1[i] - v2[i]) > 128)
-			return 1;
-	}
-
-	return 0;
-}
-
-entity_state_t* SV_FindEntInPack(int index, packet_entities_t* pack)
-{
-	if (pack->num_entities <= 0)
-		return NULL;
-
-	for (int i = 0; i < pack->num_entities; i++)
-	{
-		if (pack->entities[i].number == index)
-			return &pack->entities[i];
-	}
-
-	return NULL;
-}
 
 void (PlayerPreThinkPre)(edict_t* pEntity)
 {

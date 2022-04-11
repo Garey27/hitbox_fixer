@@ -74,7 +74,7 @@ DLL_FUNCTIONS gFunctionTable_Post =
 	NULL,					// pfnClientConnect
 	NULL,					// pfnClientDisconnect
 	NULL,					// pfnClientKill
-	NULL,					// pfnClientPutInServer
+	PutInServer,			// pfnClientPutInServer
 	NULL,					// pfnClientCommand
 	NULL,					// pfnClientUserInfoChanged
 	NULL,					// pfnServerActivate

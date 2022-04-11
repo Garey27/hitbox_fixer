@@ -58,7 +58,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: windows
-        path: ${{github.workspace}}/build/Release/hitbox_fix_mm.so
+        path: ${{github.workspace}}/build/Release/hitbox_fix_mm.dll
   publish:
     name: 'Publish'
     runs-on: ubuntu-latest
