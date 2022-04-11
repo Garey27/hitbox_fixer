@@ -10,5 +10,4 @@ This module fixes incorrect player server-side hitboxes in Counter-Strike 1.6.
 * [Release builds](https://github.com/Garey27/hitbox_fixer/releases)
 ## TODO
 - [ ] Add HLDS compatibility (need to hook client_t* struct)
-- [ ] Add Cvars to Enable/Disable fixes
 - [ ] Fully implement non-players setupbones code.
