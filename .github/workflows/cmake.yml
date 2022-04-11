@@ -25,7 +25,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: linux
-        path: ${{github.workspace}}/out/hitbox_fix_mm_i386.so
+        path: ${{github.workspace}}/build/hitbox_fix_mm_i386.so
           
   build_windows:
     runs-on: windows-latest
@@ -58,7 +58,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: windows
-        path: ${{github.workspace}}/out/Release/hitbox_fix_mm.so
+        path: ${{github.workspace}}/build/Release/hitbox_fix_mm.so
   publish:
     name: 'Publish'
     runs-on: ubuntu-latest
