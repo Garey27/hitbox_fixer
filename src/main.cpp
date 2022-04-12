@@ -303,20 +303,16 @@ void StudioEstimateGait(int index)
 		else
 			flYawDiff *= dt;
 
-#if 1
-		if (float(abs(flYawDiff)) < 0.1f)
-#else
-		if (float(abs(int64(flYawDiff))) < 0.1f)
-#endif
+		if (abs(flYawDiff) < 0.1)
 			flYawDiff = 0;
 
 		player_params[index].gaityaw += flYawDiff;
-		player_params[index].gaityaw -= int(player_params[index].gaityaw / 360) * 360;
+		player_params[index].gaityaw = player_params[index].gaityaw - (int)(player_params[index].gaityaw / 360) * 360;
 		player_params[index].m_flGaitMovement = 0;
 	}
 	else
 	{
-		player_params[index].gaityaw = (atan2(float(est_velocity.y), float(est_velocity.x)) * 180 / M_PI);
+		player_params[index].gaityaw = (atan2(est_velocity.y, est_velocity.x) * (180 / M_PI));
 
 		if (player_params[index].gaityaw > 180)
 			player_params[index].gaityaw = 180;
@@ -366,24 +362,10 @@ void CalculatePitchBlend(int index)
 
 void CalculateYawBlend(int index)
 {
-	float dt;
-	float maxyaw = 255.0f;
-
-	float flYaw;		// view direction relative to movement
-	float blend_yaw;
-
-	dt = player_params[index].m_clTime - player_params[index].m_clOldTime;
-
-	if (dt < 0.0f)
-		dt = 0;
-
-	else if (dt > 1.0f)
-		dt = 1;
-
 	StudioEstimateGait(index);
 
 	// calc side to side turning
-	flYaw = fmod(float(player_params[index].angles[1] - player_params[index].gaityaw), 360);
+	float flYaw = fmod(player_params[index].angles[1] - player_params[index].gaityaw, 360.0f);
 
 	if (flYaw < -180)
 		flYaw += 360;
@@ -391,15 +373,16 @@ void CalculateYawBlend(int index)
 	else if (flYaw > 180)
 		flYaw -= 360;
 
-	if (player_params[index].m_flGaitMovement != 0.0)
+	if (player_params[index].m_flGaitMovement)
 	{
-		if (flYaw > 120)
+		float maxyaw = 120.0;
+		if (flYaw > maxyaw)
 		{
 			player_params[index].gaityaw -= 180;
 			player_params[index].m_flGaitMovement = -player_params[index].m_flGaitMovement;
 			flYaw -= 180;
 		}
-		else if (flYaw < -120)
+		else if (flYaw < -maxyaw)
 		{
 			player_params[index].gaityaw += 180;
 			player_params[index].m_flGaitMovement = -player_params[index].m_flGaitMovement;
@@ -407,7 +390,7 @@ void CalculateYawBlend(int index)
 		}
 	}
 
-	blend_yaw = (flYaw / 90.0) * 128.0 + 127.0;
+	float blend_yaw = (flYaw / 90.0) * 128.0 + 127.0;
 	blend_yaw = clamp<float>(blend_yaw, 0.0f, 255.0f);
 	blend_yaw = 255.0 - blend_yaw;
 
@@ -576,10 +559,9 @@ int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict
 	}
 	auto id = ENTINDEX(ent) - 1;
 	auto save = player_params[id];
+	player_params[id] = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id];
 	player_params[id].sequence = state->sequence;
 	player_params[id].gaitsequence = state->gaitsequence;
-	player_params[id].prevangles = state->angles;
-	player_params[id].prevframe = state->frame;
 	player_params[id].frame = state->frame;
 	player_params[id].angles = state->angles;
 	player_params[id].origin = state->origin;
@@ -591,7 +573,17 @@ int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict
 	player_params[id].controller[3] = state->controller[3];
 	player_params[id].blending[0] = state->blending[0];
 	player_params[id].blending[1] = state->blending[1];
-	player_params[id].m_clTime = state->animtime;
+	player_params[id].m_clTime = state->animtime + _host_client->lastcmd.msec * 0.001f;
+
+	player_params[id].m_clOldTime = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].m_clTime;
+
+	auto dt = player_params[id].m_clTime - player_params[id].m_clOldTime;
+
+	player_params[id].m_prevgaitorigin = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].origin;
+
+	player_params[id].prevangles = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].angles;
+	player_params[id].prevframe = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].frame;
+	player_params[id].prevsequence = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].sequence;
 	// sequence has changed, hold the previous sequence info
 	if (player_params[id].sequence != player_params[id].prevsequence)
 	{
@@ -599,33 +591,32 @@ int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict
 
 		// save current blends to right lerping from last sequence
 		for (int i = 0; i < 2; i++)
-			player_params[id].prevseqblending[i] = player_params[id].blending[i];
-		player_params[id].prevsequence = player_params[id].sequence; // save old sequence	
+			player_params[id].prevseqblending[i] = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].blending[i];
+		player_params[id].prevsequence = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].sequence; // save old sequence	
 	}
 
 
 	// copy controllers
 	for (i = 0; i < 4; i++)
 	{
-		if (player_params[id].controller[i] != player_params[id].controller[i])
-			player_params[id].prevcontroller[i] = player_params[id].controller[i];
+		if (player_params[id].controller[i] != player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].controller[i])
+			player_params[id].prevcontroller[i] = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].controller[i];
 	}
 
 	// copy blends
 	for (i = 0; i < 2; i++)
-		player_params[id].prevblending[i] = player_params[id].blending[i];
+		player_params[id].prevblending[i] = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].blending[i];
 
-	player_params[id].m_clOldTime = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].m_clTime;
-	player_params[id].m_prevgaitorigin = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].origin;
 #if 0
+	auto len = (player_params[id].m_prevgaitorigin - player_params[id].origin).Length();
 	if (host_id == 0)
 	{
-		auto len = (player_params[id].m_prevgaitorigin - player_params[id].origin).Length();
 		if (len)
 		{
-			UTIL_ServerPrint("%f | %f %f %f\n", len, player_params[id].m_prevgaitorigin[0], player_params[id].m_prevgaitorigin[1], player_params[id].m_prevgaitorigin[2]);
+			UTIL_ServerPrint("%d | %f %f | %f %f %f | %f %f %f\n", _host_client->netchan.outgoing_sequence, len, player_params[id].gaityaw, player_params[id].m_prevgaitorigin[0], player_params[id].m_prevgaitorigin[1], player_params[id].m_prevgaitorigin[2], player_params[id].origin[0], player_params[id].origin[1], player_params[id].origin[2]);
 		}
 	}
+	UTIL_ServerPrint("do %f\n", player_params[id].angles[1]);
 #endif
 	if (player_params[id].gaitsequence)
 	{

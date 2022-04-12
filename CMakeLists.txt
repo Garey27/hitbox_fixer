@@ -66,7 +66,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")#-fvisibility=hidden -s -ffunction-sec
     )
     target_compile_options(HitboxFix PRIVATE 
    /std:c++14
-    #/ZI
+    /ZI
     #/arch:AVX2 
     /Zc:strictStrings-
     #/EHsc   
