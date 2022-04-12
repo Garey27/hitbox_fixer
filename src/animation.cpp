@@ -868,7 +868,7 @@ float StudioEstimateFrame(mstudioseqdesc_t* pseqdesc)
 }
 
 
-void SV_StudioSetupBones(model_t* pModel, float frame, int sequence, const vec_t* angles, const vec_t* origin, const byte* pcontroller, const byte* pblending, int iBone, const edict_t* pEdict)
+void EXT_FUNC SV_StudioSetupBones(model_t* pModel, float frame, int sequence, const vec_t* angles, const vec_t* origin, const byte* pcontroller, const byte* pblending, int iBone, const edict_t* pEdict)
 {
 	int i, j, chainlength = 0;
 	int chain[MAXSTUDIOBONES];
