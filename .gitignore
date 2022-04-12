@@ -447,3 +447,5 @@ dkms.conf
 *.exe
 *.out
 *.app
+
+CMakeSettings.json

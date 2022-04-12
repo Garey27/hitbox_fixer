@@ -466,6 +466,9 @@ void PlayerPostThinkPost(edict_t* pEntity)
 	player_params[id].controller[3] = _host_client->edict->v.controller[3];
 	player_params[id].blending[0] = _host_client->edict->v.blending[0];
 	player_params[id].blending[1] = _host_client->edict->v.blending[1];
+	if (player_params[id].sequence < 0)	
+		player_params[id].sequence = 0;
+
 	// sequence has changed, hold the previous sequence info
 	if (player_params[id].sequence != player_params[id].prevsequence)
 	{
@@ -584,6 +587,10 @@ int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict
 	player_params[id].prevangles = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].angles;
 	player_params[id].prevframe = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].frame;
 	player_params[id].prevsequence = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].sequence;
+
+	if (player_params[id].sequence < 0)
+		player_params[id].sequence = 0;
+
 	// sequence has changed, hold the previous sequence info
 	if (player_params[id].sequence != player_params[id].prevsequence)
 	{

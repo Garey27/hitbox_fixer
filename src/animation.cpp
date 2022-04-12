@@ -344,12 +344,10 @@ mstudioanim_t* StudioGetAnim(model_t* m_pSubModel, mstudioseqdesc_t* pseqdesc)
 		paSequences = (cache_user_t*)IEngineStudio.Mem_Calloc(16, sizeof(cache_user_t)); // UNDONE: leak!
 		m_pSubModel->submodels = (dmodel_t*)paSequences;
 	}
-#if 0 // todo there crash in some servers
 	if (!IEngineStudio.Cache_Check((struct cache_user_s*)&(paSequences[pseqdesc->seqgroup])))
 	{
 		IEngineStudio.LoadCacheFile(pseqgroup->name, (struct cache_user_s*)&paSequences[pseqdesc->seqgroup]);
 	}
-#endif
 	return (mstudioanim_t*)((byte*)paSequences[pseqdesc->seqgroup].data + pseqdesc->animindex);
 }
 
@@ -921,7 +919,7 @@ void EXT_FUNC SV_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 	g_pstudiohdr = (studiohdr_t*)IEngineStudio.Mod_Extradata(pModel);
 
 	// Bound sequence number
-	if (sequence < 0 || sequence >= g_pstudiohdr->numseq)
+	if (!g_pstudiohdr || sequence < 0 || sequence >= g_pstudiohdr->numseq)
 		sequence = 0;
 
 	pbones = (mstudiobone_t*)((byte*)g_pstudiohdr + g_pstudiohdr->boneindex);
@@ -1078,7 +1076,7 @@ void EXT_FUNC SV_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 	if (
 		player_params[player].sequencetime &&
 		(player_params[player].sequencetime + 0.2 > player_params[player].m_clTime) &&
-		(player_params[player].prevsequence < g_pstudiohdr->numseq))
+		(player_params[player].prevsequence >= 0 && player_params[player].prevsequence < g_pstudiohdr->numseq))
 	{
 		// blend from last sequence
 		static float pos1b[MAXSTUDIOBONES][3];
