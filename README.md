@@ -2,7 +2,7 @@
 This module fixes incorrect player server-side hitboxes in Counter-Strike 1.6.
 ## Requirements
 * [REHLDS](https://github.com/dreamstalker/rehlds/releases) version 3.11 or above 
-## Demonstration of bugs and fixes
+## Demonstration of bugs and fixes (youtube video)
 [![CS 1.6 Hitboxes Bugs and Fixes](https://img.youtube.com/vi/gPCN_6aXl54/0.jpg)](https://www.youtube.com/watch?v=gPCN_6aXl54 "CS 1.6 Hitboxes Bugs and Fixes")
 ## Fixes
 - [x] Fixes absolutely broken hitboxes when numblends == 1 (ducking/standing in reload weapon or plant c4 animation).
