@@ -98,13 +98,13 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 	memset(truepositions, 0, sizeof(truepositions));
 	nofind = 1;
 	if (!MDLL_AllowLagCompensation())
-		return;
+		RETURN_META(MRES_IGNORED);
 
 	if (sv_unlag->value == 0.0f || !_host_client->lw || !_host_client->lc)
-		return;
+		RETURN_META(MRES_IGNORED);
 
 	if (g_RehldsSvs->GetMaxClients() <= 1 || !_host_client->active)
-		return;
+		RETURN_META(MRES_IGNORED);
 
 	nofind = 0;
 	for (int i = 0; i < g_RehldsSvs->GetMaxClients(); i++)
@@ -148,7 +148,7 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 	{
 		memset(truepositions, 0, sizeof(truepositions));
 		nofind = 1;
-		return;
+		RETURN_META(MRES_IGNORED);
 	}
 
 	frame = nextFrame = NULL;
@@ -165,8 +165,7 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 	{
 		memset(truepositions, 0, sizeof(truepositions));
 		nofind = 1;
-		return;
-
+		RETURN_META(MRES_IGNORED);
 	}
 
 	if (!frame)
@@ -234,6 +233,7 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 		}
 #endif
 	}
+	RETURN_META(MRES_IGNORED);
 }
 
 
@@ -519,17 +519,17 @@ void PlayerPostThinkPost(edict_t* pEntity)
 	if (nofind)
 	{
 		nofind = 0;
-		return;
+		RETURN_META(MRES_IGNORED);
 	}
 
 	if (!MDLL_AllowLagCompensation())
-		return;
+		RETURN_META(MRES_IGNORED);
 
 	if (g_RehldsSvs->GetMaxClients() <= 1 || sv_unlag->value == 0.0)
-		return;
+		RETURN_META(MRES_IGNORED);
 
 	if (!_host_client->lw || !_host_client->lc || !_host_client->active)
-		return;
+		RETURN_META(MRES_IGNORED);
 
 	for (int i = 0; i < g_RehldsSvs->GetMaxClients(); i++)
 	{
@@ -549,6 +549,7 @@ void PlayerPostThinkPost(edict_t* pEntity)
 
 		player_params[i] = truepositions[i].extra;
 	}
+	RETURN_META(MRES_IGNORED);
 }
 
 int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict_t* host, int hostflags, int player, unsigned char* pSet)
