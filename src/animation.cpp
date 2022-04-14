@@ -865,8 +865,295 @@ float StudioEstimateFrame(mstudioseqdesc_t* pseqdesc)
 	return f;
 }
 
+/*
+====================
+StudioEstimateFrame
+====================
+*/
+float HL_StudioEstimateFrame(mstudioseqdesc_t* pseqdesc)
+{
+	double	dfdt, f;
 
-void EXT_FUNC SV_StudioSetupBones(model_t* pModel, float frame, int sequence, const vec_t* angles, const vec_t* origin, const byte* pcontroller, const byte* pblending, int iBone, const edict_t* pEdict)
+
+	if (1)
+	{
+		if (player_params[player].m_clTime < player_params[player].animtime)
+		{
+			dfdt = 0;
+		}
+		else
+		{
+			dfdt = (player_params[player].m_clTime - player_params[player].animtime) * player_params[player].framerate * pseqdesc->fps;
+		}
+	}
+	else
+	{
+		dfdt = 0;
+	}
+
+
+	if (pseqdesc->numframes <= 1)
+	{
+		f = 0;
+	}
+	else
+	{
+		f = (player_params[player].frame * (pseqdesc->numframes - 1)) / 256.0;
+	}
+
+	f += dfdt;
+
+	if (pseqdesc->flags & STUDIO_LOOPING)
+	{
+		if (pseqdesc->numframes > 1)
+			f -= (int)(f / (pseqdesc->numframes - 1)) * (pseqdesc->numframes - 1);
+		if (f < 0) f += (pseqdesc->numframes - 1);
+	}
+	else
+	{
+		if (f >= pseqdesc->numframes - 1.001)
+			f = pseqdesc->numframes - 1.001;
+		if (f < 0.0)  f = 0.0;
+	}
+	return f;
+}
+
+/*
+====================
+StudioEstimateInterpolant
+====================
+*/
+float HL_StudioEstimateInterpolant()
+{
+	float	dadt = 1.0f;
+
+	if ((player_params[player].m_clTime >= player_params[player].m_clOldTime + 0.01f))
+	{
+		dadt = (player_params[player].m_clTime - player_params[player].m_clOldTime) / 0.1f;
+		if (dadt > 2.0f) dadt = 2.0f;
+	}
+
+	return dadt;
+}
+
+void EXT_FUNC HL_StudioSetupBones(model_t* pModel, float frame, int sequence, const vec_t* angles, const vec_t* origin, const byte* pcontroller, const byte* pblending, int iBone, const edict_t* pEdict)
+{
+	int i, j, chainlength = 0;
+	int chain[MAXSTUDIOBONES];
+	double		f;
+	mstudiobone_t* pbones;
+	mstudioseqdesc_t* pseqdesc;
+	mstudioanim_t* panim;
+	float bonematrix[3][4];
+	static float pos[MAXSTUDIOBONES][3];
+	static vec4_t q[MAXSTUDIOBONES];
+
+	static float pos2[MAXSTUDIOBONES][3];
+	static vec4_t q2[MAXSTUDIOBONES];
+	static float pos3[MAXSTUDIOBONES][3];
+	static vec4_t q3[MAXSTUDIOBONES];
+	static float pos4[MAXSTUDIOBONES][3];
+	static vec4_t q4[MAXSTUDIOBONES];
+
+	byte prevcontroller[4];
+	byte controller[4];
+	vec3_t temp_angles;
+	if (!phf_hitbox_fix->value)
+	{
+		orig_interface.SV_StudioSetupBones(pModel, frame, sequence, angles, origin, pcontroller, pblending, iBone, pEdict);
+		return;
+	}
+
+	if (ENTINDEX(pEdict) <= g_RehldsSvs->GetMaxClients())
+	{
+		player = ENTINDEX(pEdict) - 1;
+		sequence = player_params[player].sequence;
+		frame = player_params[player].frame;
+		temp_angles = player_params[player].angles;
+		controller[0] = player_params[player].controller[0];
+		controller[1] = player_params[player].controller[1];
+		controller[2] = player_params[player].controller[2];
+		controller[3] = player_params[player].controller[3];
+		prevcontroller[0] = player_params[player].prevcontroller[0];
+		prevcontroller[1] = player_params[player].prevcontroller[1];
+		prevcontroller[2] = player_params[player].prevcontroller[2];
+		prevcontroller[3] = player_params[player].prevcontroller[3];
+	}
+	else
+	{
+		// todo implement non-players backtracked animation
+		orig_interface.SV_StudioSetupBones(pModel, frame, sequence, angles, origin, pcontroller, pblending, iBone, pEdict);
+		return;
+	}
+
+	g_pstudiohdr = (studiohdr_t*)IEngineStudio.Mod_Extradata(pModel);
+
+	if (!g_pstudiohdr)
+	{
+		return;
+	}
+
+	if (sequence >= g_pstudiohdr->numseq)
+		sequence = 0;
+
+
+	pbones = (mstudiobone_t*)((byte*)g_pstudiohdr + g_pstudiohdr->boneindex);
+
+	if (iBone < -1 || iBone >= g_pstudiohdr->numbones)
+		iBone = 0;
+
+
+	if (iBone == -1)
+	{
+		chainlength = g_pstudiohdr->numbones;
+
+		for (i = 0; i < chainlength; i++)
+			chain[(chainlength - i) - 1] = i;
+	}
+	else
+	{
+		// only the parent bones
+		for (i = iBone; i != -1; i = pbones[i].parent)
+			chain[chainlength++] = i;
+	}
+
+	pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + sequence;
+
+	f = HL_StudioEstimateFrame(pseqdesc);
+
+	panim = StudioGetAnim(pModel, pseqdesc);
+	StudioCalcRotations(pbones, chain, chainlength, pos, q, pseqdesc, panim, f);
+
+	if (pseqdesc->numblends > 1)
+	{
+		float	s;
+		float	dadt;
+
+		panim += g_pstudiohdr->numbones;
+		StudioCalcRotations(pbones, chain, chainlength, pos2, q2, pseqdesc, panim, f);
+
+		dadt = HL_StudioEstimateInterpolant();
+		s = (player_params[player].blending[0] * dadt + player_params[player].prevblending[0] * (1.0f - dadt)) / 255.0f;
+
+		StudioSlerpBones(q, pos, q2, pos2, s);
+
+		if (pseqdesc->numblends == 4)
+		{
+			panim += g_pstudiohdr->numbones;
+			StudioCalcRotations(pbones, chain, chainlength, pos3, q3, pseqdesc, panim, f);
+
+			panim += g_pstudiohdr->numbones;
+			StudioCalcRotations(pbones, chain, chainlength, pos4, q4, pseqdesc, panim, f);
+
+			s = (player_params[player].blending[0] * dadt + player_params[player].prevblending[0] * (1.0f - dadt)) / 255.0f;
+			StudioSlerpBones(q3, pos3, q4, pos4, s);
+
+			s = (player_params[player].blending[1] * dadt + player_params[player].prevblending[1] * (1.0f - dadt)) / 255.0f;
+			StudioSlerpBones(q, pos, q3, pos3, s);
+		}
+	}
+
+	if (player_params[player].sequencetime && (player_params[player].sequencetime + 0.2f > player_params[player].m_clTime) && (player_params[player].prevsequence < g_pstudiohdr->numseq))
+	{
+		// blend from last sequence
+		static float	pos1b[MAXSTUDIOBONES][3];
+		static vec4_t	q1b[MAXSTUDIOBONES];
+		float		s;
+
+		pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + player_params[player].prevsequence;
+		panim = StudioGetAnim(pModel, pseqdesc);
+
+		// clip prevframe
+		StudioCalcRotations(pbones, chain, chainlength, pos1b, q1b, pseqdesc, panim, player_params[player].prevframe);
+
+		if (pseqdesc->numblends > 1)
+		{
+			panim += g_pstudiohdr->numbones;
+			StudioCalcRotations(pbones, chain, chainlength, pos2, q2, pseqdesc, panim, player_params[player].prevframe);
+
+			s = (player_params[player].prevseqblending[0]) / 255.0f;
+			StudioSlerpBones(q1b, pos1b, q2, pos2, s);
+
+			if (pseqdesc->numblends == 4)
+			{
+				panim += g_pstudiohdr->numbones;
+				StudioCalcRotations(pbones, chain, chainlength,  pos3, q3, pseqdesc, panim, player_params[player].prevframe);
+
+				panim += g_pstudiohdr->numbones;
+				StudioCalcRotations(pbones, chain, chainlength, pos4, q4, pseqdesc, panim, player_params[player].prevframe);
+
+				s = (player_params[player].prevseqblending[0]) / 255.0f;
+				StudioSlerpBones(q3, pos3, q4, pos4, s);
+
+				s = (player_params[player].prevseqblending[1]) / 255.0f;
+				StudioSlerpBones(q1b, pos1b, q3, pos3, s);
+			}
+		}
+
+		s = 1.0f - (player_params[player].m_clTime - player_params[player].sequencetime) / 0.2f;
+		StudioSlerpBones(q, pos, q1b, pos1b, s);
+	}
+	else
+	{
+		// store prevframe otherwise
+		player_params[player].prevframe = f;
+	}
+
+	pbones = (mstudiobone_t*)((byte*)g_pstudiohdr + g_pstudiohdr->boneindex);
+
+	// calc gait animation
+	if (player_params[player].gaitsequence != 0)
+	{
+		qboolean	copy_bones = true;
+
+		if (player_params[player].gaitsequence >= g_pstudiohdr->numseq)
+			player_params[player].gaitsequence = 0;
+
+		pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + player_params[player].gaitsequence;
+
+		panim = StudioGetAnim(pModel, pseqdesc);
+		StudioCalcRotations(pbones, chain, chainlength,  pos2, q2, pseqdesc, panim, player_params[player].gaitframe);
+
+		for (i = 0; i < g_pstudiohdr->numbones; i++)
+		{
+			if (!strcmp(pbones[i].name, "Bip01 Spine"))
+				copy_bones = false;
+			else if (!strcmp(pbones[pbones[i].parent].name, "Bip01 Pelvis"))
+				copy_bones = true;
+
+			if (!copy_bones) continue;
+
+			if (copy_bones)
+			{
+				memcpy(pos[i], pos2[i], sizeof(pos[i]));
+				memcpy(q[i], q2[i], sizeof(q[i]));
+			}
+		}
+	}
+
+	AngleMatrix(temp_angles, (*g_pRotationMatrix));
+
+	(*g_pRotationMatrix)[0][3] = origin[0];
+	(*g_pRotationMatrix)[1][3] = origin[1];
+	(*g_pRotationMatrix)[2][3] = origin[2];
+
+	for (i = chainlength - 1; i >= 0; i--)
+	{
+		j = chain[i];
+		QuaternionMatrix(q[j], bonematrix);
+
+		bonematrix[0][3] = pos[j][0];
+		bonematrix[1][3] = pos[j][1];
+		bonematrix[2][3] = pos[j][2];
+
+		if (pbones[j].parent == -1)
+			ConcatTransforms((*g_pRotationMatrix), bonematrix, (*g_pBoneTransform)[j]);
+		else
+			ConcatTransforms((*g_pBoneTransform)[pbones[j].parent], bonematrix, (*g_pBoneTransform)[j]);
+	}
+}
+
+void EXT_FUNC CS_StudioSetupBones(model_t* pModel, float frame, int sequence, const vec_t* angles, const vec_t* origin, const byte* pcontroller, const byte* pblending, int iBone, const edict_t* pEdict)
 {
 	int i, j, chainlength = 0;
 	int chain[MAXSTUDIOBONES];
@@ -913,13 +1200,18 @@ void EXT_FUNC SV_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 	}
 	else
 	{
-		CStudioModelRenderer_StudioSetupBones(pModel, frame, sequence, angles, origin, pcontroller, pblending, iBone, pEdict);
+		// todo implement non-players backtracked animation
+		orig_interface.SV_StudioSetupBones(pModel, frame, sequence, angles, origin, pcontroller, pblending, iBone, pEdict);
 		return;
 	}
 	g_pstudiohdr = (studiohdr_t*)IEngineStudio.Mod_Extradata(pModel);
 
+	if (!g_pstudiohdr)
+	{
+		return;
+	}
 	// Bound sequence number
-	if (!g_pstudiohdr || sequence < 0 || sequence >= g_pstudiohdr->numseq)
+	if (sequence < 0 || sequence >= g_pstudiohdr->numseq)
 		sequence = 0;
 
 	pbones = (mstudiobone_t*)((byte*)g_pstudiohdr + g_pstudiohdr->boneindex);

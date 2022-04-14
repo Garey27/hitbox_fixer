@@ -12,6 +12,8 @@ cvar_t* sv_unlagpush;
 cvar_t hf_hitbox_fix = { "hbf_enabled", "1", FCVAR_SERVER | FCVAR_PROTECTED, 0.0f, NULL };
 cvar_t* phf_hitbox_fix;
 char g_ExecConfigCmd[MAX_PATH];
+
+GameType_e g_eGameType;
 const char CFG_FILE[] = "hbf.cfg";
 extern server_studio_api_t IEngineStudio;
 extern studiohdr_t* g_pstudiohdr;
@@ -405,6 +407,184 @@ void CalculateYawBlend(int index)
 	player_params[index].prevangles[1] = player_params[index].angles[1];
 }
 
+/*
+====================
+StudioPlayerBlend
+====================
+*/
+void HL_StudioPlayerBlend(mstudioseqdesc_t* pseqdesc, int* pBlend, float* pPitch)
+{
+	// calc up/down pointing
+	*pBlend = (*pPitch * 3.0f);
+
+	if (*pBlend < pseqdesc->blendstart[0])
+	{
+		*pPitch -= pseqdesc->blendstart[0] / 3.0f;
+		*pBlend = 0;
+	}
+	else if (*pBlend > pseqdesc->blendend[0])
+	{
+		*pPitch -= pseqdesc->blendend[0] / 3.0f;
+		*pBlend = 255;
+	}
+	else
+	{
+		if (pseqdesc->blendend[0] - pseqdesc->blendstart[0] < 0.1f) // catch qc error
+			*pBlend = 127;
+		else *pBlend = 255 * (*pBlend - pseqdesc->blendstart[0]) / (pseqdesc->blendend[0] - pseqdesc->blendstart[0]);
+		*pPitch = 0.0f;
+	}
+}
+
+/*
+====================
+StudioEstimateGait
+====================
+*/
+void HL_StudioEstimateGait(int index)
+{
+	vec3_t	est_velocity;
+	float dt = player_params[index].m_clTime - player_params[index].m_clOldTime;
+
+	if (dt < 0.0)
+		dt = 0;
+
+	else if (dt > 1.0)
+		dt = 1;
+
+
+	VectorSubtract(player_params[index].origin, player_params[index].m_prevgaitorigin, est_velocity);
+	VectorCopy(player_params[index].origin, player_params[index].m_prevgaitorigin);
+	player_params[index].m_flGaitMovement = (est_velocity).Length();
+
+	if (dt <= 0.0f || player_params[index].m_flGaitMovement / dt < 5.0f)
+	{
+		player_params[index].m_flGaitMovement = 0.0f;
+		est_velocity[0] = 0.0f;
+		est_velocity[1] = 0.0f;
+	}
+
+	if (est_velocity[1] == 0.0f && est_velocity[0] == 0.0f)
+	{
+		float	flYawDiff = player_params[index].angles[1] - player_params[index].gaityaw;
+
+		flYawDiff = flYawDiff - (int)(flYawDiff / 360) * 360;
+		if (flYawDiff > 180.0f) flYawDiff -= 360.0f;
+		if (flYawDiff < -180.0f) flYawDiff += 360.0f;
+
+		if (dt < 0.25f)
+			flYawDiff *= dt * 4.0f;
+		else flYawDiff *= dt;
+
+		player_params[index].gaityaw += flYawDiff;
+		player_params[index].gaityaw = player_params[index].gaityaw - (int)(player_params[index].gaityaw / 360) * 360;
+
+		player_params[index].m_flGaitMovement = 0.0f;
+	}
+	else
+	{
+		player_params[index].gaityaw = (atan2(est_velocity[1], est_velocity[0]) * 180 / M_PI);
+		if (player_params[index].gaityaw > 180.0f) player_params[index].gaityaw = 180.0f;
+		if (player_params[index].gaityaw < -180.0f) player_params[index].gaityaw = -180.0f;
+	}
+
+}
+
+/*
+====================
+StudioProcessGait
+====================
+*/
+void HL_StudioProcessGait(int index)
+{
+	mstudioseqdesc_t* pseqdesc;
+	int		iBlend;
+	float		flYaw; // view direction relative to movement
+
+	auto ent = INDEXENT(index + 1);
+	if (!ent)
+	{
+		return;
+	}
+
+
+	studiohdr_t* pstudiohdr = (studiohdr_t*)GET_MODEL_PTR(ent);
+
+	if (!pstudiohdr)
+		return;
+
+	pseqdesc = (mstudioseqdesc_t*)((byte*)pstudiohdr + pstudiohdr->seqindex) + player_params[index].sequence;
+
+	if (player_params[index].sequence >= pstudiohdr->numseq)
+		player_params[index].sequence = 0;
+
+	float dt = player_params[index].m_clTime - player_params[index].m_clOldTime;
+
+	if (dt < 0.0)
+		dt = 0;
+
+	else if (dt > 1.0)
+		dt = 1;
+
+	pseqdesc = (mstudioseqdesc_t*)((byte*)pstudiohdr + pstudiohdr->seqindex) + player_params[index].sequence;
+
+	HL_StudioPlayerBlend(pseqdesc, &iBlend, &player_params[index].angles[0]);
+
+	player_params[index].prevangles[0] = player_params[index].angles[0];
+	player_params[index].blending[0] = iBlend;
+	player_params[index].prevblending[0] = player_params[index].blending[0];
+	player_params[index].prevseqblending[0] = player_params[index].blending[0];
+	HL_StudioEstimateGait(index);
+
+	// calc side to side turning
+	flYaw = player_params[index].angles[1] - player_params[index].gaityaw;
+	flYaw = flYaw - (int)(flYaw / 360) * 360;
+	if (flYaw < -180.0f) flYaw = flYaw + 360.0f;
+	if (flYaw > 180.0f) flYaw = flYaw - 360.0f;
+
+	if (flYaw > 120.0f)
+	{
+		player_params[index].gaityaw = player_params[index].gaityaw - 180.0f;
+		player_params[index].m_flGaitMovement = -player_params[index].m_flGaitMovement;
+		flYaw = flYaw - 180.0f;
+	}
+	else if (flYaw < -120.0f)
+	{
+		player_params[index].gaityaw = player_params[index].gaityaw + 180.0f;
+		player_params[index].m_flGaitMovement = -player_params[index].m_flGaitMovement;
+		flYaw = flYaw + 180.0f;
+	}
+
+	// adjust torso
+	player_params[index].controller[0] = ((flYaw / 4.0f) + 30.0f) / (60.0f / 255.0f);
+	player_params[index].controller[1] = ((flYaw / 4.0f) + 30.0f) / (60.0f / 255.0f);
+	player_params[index].controller[2] = ((flYaw / 4.0f) + 30.0f) / (60.0f / 255.0f);
+	player_params[index].controller[3] = ((flYaw / 4.0f) + 30.0f) / (60.0f / 255.0f);
+	player_params[index].prevcontroller[0] = player_params[index].controller[0];
+	player_params[index].prevcontroller[1] = player_params[index].controller[1];
+	player_params[index].prevcontroller[2] = player_params[index].controller[2];
+	player_params[index].prevcontroller[3] = player_params[index].controller[3];
+
+	player_params[index].angles[1] = player_params[index].gaityaw;
+	if (player_params[index].angles[1] < -0) player_params[index].angles[1] += 360.0f;
+	player_params[index].prevangles[1] = player_params[index].angles[1];
+
+	if (player_params[index].gaitsequence >= g_pstudiohdr->numseq)
+		player_params[index].gaitsequence = 0;
+
+	pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + player_params[index].gaitsequence;
+
+	// calc gait frame
+	if (pseqdesc->linearmovement[0] > 0)
+		player_params[index].gaitframe += (player_params[index].m_flGaitMovement / pseqdesc->linearmovement[0]) * pseqdesc->numframes;
+	else player_params[index].gaitframe += pseqdesc->fps * dt;
+
+	// do modulo
+	player_params[index].gaitframe = player_params[index].gaitframe - (int)(player_params[index].gaitframe / pseqdesc->numframes) * pseqdesc->numframes;
+	if (player_params[index].gaitframe < 0) player_params[index].gaitframe += pseqdesc->numframes;
+}
+
+
 void StudioProcessGait(int index)
 {
 	mstudioseqdesc_t* pseqdesc;
@@ -443,76 +623,157 @@ void StudioProcessGait(int index)
 		player_params[index].gaitframe += pseqdesc->numframes;
 }
 
+void ProcessAnimParams(int id, float frametime, player_anim_params_s& params, player_anim_params_s* prev_params, entity_state_s* state, edict_t* ent)
+{
+	int i;
+	if (state && prev_params)
+	{
+		player_params[id] = *prev_params;
+		player_params[id].sequence = state->sequence;
+		player_params[id].gaitsequence = state->gaitsequence;
+		player_params[id].frame = state->frame;
+		player_params[id].angles = state->angles;
+		player_params[id].origin = state->origin;
+		player_params[id].animtime = state->animtime;
+		player_params[id].framerate = state->framerate;
+		player_params[id].controller[0] = state->controller[0];
+		player_params[id].controller[1] = state->controller[1];
+		player_params[id].controller[2] = state->controller[2];
+		player_params[id].controller[3] = state->controller[3];
+		player_params[id].blending[0] = state->blending[0];
+		player_params[id].blending[1] = state->blending[1];
+		player_params[id].m_clTime = state->animtime + frametime;
+
+		player_params[id].m_clOldTime = prev_params->m_clTime;
+
+		player_params[id].m_prevgaitorigin = prev_params->origin;
+
+		player_params[id].prevangles = prev_params->angles;
+		player_params[id].prevframe = prev_params->frame;
+		player_params[id].prevsequence = prev_params->sequence;
+
+		if (player_params[id].sequence < 0)
+			player_params[id].sequence = 0;
+
+		// sequence has changed, hold the previous sequence info
+		if (player_params[id].sequence != player_params[id].prevsequence)
+		{
+			player_params[id].sequencetime = player_params[id].animtime + 0.01f;
+
+			// save current blends to right lerping from last sequence
+			for (int i = 0; i < 2; i++)
+				player_params[id].prevseqblending[i] = prev_params->blending[i];
+			player_params[id].prevsequence = prev_params->sequence; // save old sequence	
+		}
+
+
+		// copy controllers
+		for (i = 0; i < 4; i++)
+		{
+			if (player_params[id].controller[i] != prev_params->controller[i])
+				player_params[id].prevcontroller[i] = prev_params->controller[i];
+		}
+
+		// copy blends
+		for (i = 0; i < 2; i++)
+			player_params[id].prevblending[i] = prev_params->blending[i];
+	}
+	else
+	{
+
+		player_params[id].sequence = ent->v.sequence;
+		player_params[id].gaitsequence = ent->v.gaitsequence;
+		player_params[id].prevangles = player_params[id].angles;
+		player_params[id].prevframe = player_params[id].frame;
+		player_params[id].frame = ent->v.frame;
+		player_params[id].angles = ent->v.angles;
+		player_params[id].origin = ent->v.origin;
+		player_params[id].animtime = ent->v.animtime;
+		player_params[id].m_clOldTime = player_params[id].m_clTime;
+		player_params[id].m_clTime = ent->v.animtime;
+		player_params[id].framerate = ent->v.framerate;
+		player_params[id].controller[0] = ent->v.controller[0];
+		player_params[id].controller[1] = ent->v.controller[1];
+		player_params[id].controller[2] = ent->v.controller[2];
+		player_params[id].controller[3] = ent->v.controller[3];
+		player_params[id].blending[0] = ent->v.blending[0];
+		player_params[id].blending[1] = ent->v.blending[1];
+		if (player_params[id].sequence < 0)
+			player_params[id].sequence = 0;
+
+		// sequence has changed, hold the previous sequence info
+		if (player_params[id].sequence != player_params[id].prevsequence)
+		{
+			player_params[id].sequencetime = player_params[id].animtime + 0.01f;
+
+			// save current blends to right lerping from last sequence
+			for (int i = 0; i < 2; i++)
+				player_params[id].prevseqblending[i] = player_params[id].blending[i];
+			player_params[id].prevsequence = player_params[id].sequence; // save old sequence	
+		}
+
+
+		// copy controllers
+		for (i = 0; i < 4; i++)
+		{
+			if (player_params[id].controller[i] != player_params[id].controller[i])
+				player_params[id].prevcontroller[i] = player_params[id].controller[i];
+		}
+
+		// copy blends
+		for (i = 0; i < 2; i++)
+			player_params[id].prevblending[i] = player_params[id].blending[i];
+
+	}
+
+	if (g_eGameType == GT_CStrike || g_eGameType == GT_CZero)
+	{
+		if (player_params[id].gaitsequence)
+		{
+			StudioProcessGait(id);
+		}
+		else
+		{
+			player_params[id].controller[0] = 127;
+			player_params[id].controller[1] = 127;
+			player_params[id].controller[2] = 127;
+			player_params[id].controller[3] = 127;
+			player_params[id].prevcontroller[0] = player_params[id].controller[0];
+			player_params[id].prevcontroller[1] = player_params[id].controller[1];
+			player_params[id].prevcontroller[2] = player_params[id].controller[2];
+			player_params[id].prevcontroller[3] = player_params[id].controller[3];
+
+			CalculatePitchBlend(id);
+			CalculateYawBlend(id);
+		}
+	}
+	else
+	{
+		if (player_params[id].gaitsequence)
+		{
+			HL_StudioProcessGait(id);
+		}
+		else
+		{
+			player_params[id].controller[0] = 127;
+			player_params[id].controller[1] = 127;
+			player_params[id].controller[2] = 127;
+			player_params[id].controller[3] = 127;
+			player_params[id].prevcontroller[0] = player_params[id].controller[0];
+			player_params[id].prevcontroller[1] = player_params[id].controller[1];
+			player_params[id].prevcontroller[2] = player_params[id].controller[2];
+			player_params[id].prevcontroller[3] = player_params[id].controller[3];
+		}
+	}
+}
+
 void PlayerPostThinkPost(edict_t* pEntity)
 {
 	int i;
 	auto id = ENTINDEX(pEntity) - 1;
 	auto _host_client = g_RehldsSvs->GetClient_t(id);
 
-	player_params[id].sequence = _host_client->edict->v.sequence;
-	player_params[id].gaitsequence = _host_client->edict->v.gaitsequence;
-	player_params[id].prevangles = player_params[id].angles;
-	player_params[id].prevframe = player_params[id].frame;
-	player_params[id].frame = _host_client->edict->v.frame;
-	player_params[id].angles = _host_client->edict->v.angles;
-	player_params[id].origin = _host_client->edict->v.origin;
-	player_params[id].animtime = _host_client->edict->v.animtime;
-	player_params[id].m_clOldTime = player_params[id].m_clTime;
-	player_params[id].m_clTime = _host_client->edict->v.animtime;
-	player_params[id].framerate = _host_client->edict->v.framerate;
-	player_params[id].controller[0] = _host_client->edict->v.controller[0];
-	player_params[id].controller[1] = _host_client->edict->v.controller[1];
-	player_params[id].controller[2] = _host_client->edict->v.controller[2];
-	player_params[id].controller[3] = _host_client->edict->v.controller[3];
-	player_params[id].blending[0] = _host_client->edict->v.blending[0];
-	player_params[id].blending[1] = _host_client->edict->v.blending[1];
-	if (player_params[id].sequence < 0)	
-		player_params[id].sequence = 0;
-
-	// sequence has changed, hold the previous sequence info
-	if (player_params[id].sequence != player_params[id].prevsequence)
-	{
-		player_params[id].sequencetime = player_params[id].animtime + 0.01f;
-
-		// save current blends to right lerping from last sequence
-		for (int i = 0; i < 2; i++)
-			player_params[id].prevseqblending[i] = player_params[id].blending[i];
-		player_params[id].prevsequence = player_params[id].sequence; // save old sequence	
-	}
-
-
-	// copy controllers
-	for (i = 0; i < 4; i++)
-	{
-		if (player_params[id].controller[i] != player_params[id].controller[i])
-			player_params[id].prevcontroller[i] = player_params[id].controller[i];
-	}
-
-	// copy blends
-	for (i = 0; i < 2; i++)
-		player_params[id].prevblending[i] = player_params[id].blending[i];
-
-
-	if (player_params[id].gaitsequence)
-	{
-		StudioProcessGait(id);
-	}
-	else
-	{
-		player_params[id].controller[0] = 127;
-		player_params[id].controller[1] = 127;
-		player_params[id].controller[2] = 127;
-		player_params[id].controller[3] = 127;
-		player_params[id].prevcontroller[0] = player_params[id].controller[0];
-		player_params[id].prevcontroller[1] = player_params[id].controller[1];
-		player_params[id].prevcontroller[2] = player_params[id].controller[2];
-		player_params[id].prevcontroller[3] = player_params[id].controller[3];
-
-		CalculatePitchBlend(id);
-		CalculateYawBlend(id);
-	}
-
-
+	ProcessAnimParams(id, _host_client->lastcmd.msec * 0.001f, player_params[id], nullptr, nullptr, pEntity);
 	sv_adjusted_positions_t* pos;
 	client_t* cli;
 
@@ -552,6 +813,7 @@ void PlayerPostThinkPost(edict_t* pEntity)
 	RETURN_META(MRES_IGNORED);
 }
 
+
 int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict_t* host, int hostflags, int player, unsigned char* pSet)
 {
 	int i;
@@ -563,87 +825,10 @@ int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict
 	}
 	auto id = ENTINDEX(ent) - 1;
 	auto save = player_params[id];
-	player_params[id] = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id];
-	player_params[id].sequence = state->sequence;
-	player_params[id].gaitsequence = state->gaitsequence;
-	player_params[id].frame = state->frame;
-	player_params[id].angles = state->angles;
-	player_params[id].origin = state->origin;
-	player_params[id].animtime = state->animtime;
-	player_params[id].framerate = state->framerate;
-	player_params[id].controller[0] = state->controller[0];
-	player_params[id].controller[1] = state->controller[1];
-	player_params[id].controller[2] = state->controller[2];
-	player_params[id].controller[3] = state->controller[3];
-	player_params[id].blending[0] = state->blending[0];
-	player_params[id].blending[1] = state->blending[1];
-	player_params[id].m_clTime = state->animtime + _host_client->lastcmd.msec * 0.001f;
 
-	player_params[id].m_clOldTime = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].m_clTime;
-
-	auto dt = player_params[id].m_clTime - player_params[id].m_clOldTime;
-
-	player_params[id].m_prevgaitorigin = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].origin;
-
-	player_params[id].prevangles = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].angles;
-	player_params[id].prevframe = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].frame;
-	player_params[id].prevsequence = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].sequence;
-
-	if (player_params[id].sequence < 0)
-		player_params[id].sequence = 0;
-
-	// sequence has changed, hold the previous sequence info
-	if (player_params[id].sequence != player_params[id].prevsequence)
-	{
-		player_params[id].sequencetime = player_params[id].animtime + 0.01f;
-
-		// save current blends to right lerping from last sequence
-		for (int i = 0; i < 2; i++)
-			player_params[id].prevseqblending[i] = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].blending[i];
-		player_params[id].prevsequence = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].sequence; // save old sequence	
-	}
-
-
-	// copy controllers
-	for (i = 0; i < 4; i++)
-	{
-		if (player_params[id].controller[i] != player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].controller[i])
-			player_params[id].prevcontroller[i] = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].controller[i];
-	}
-
-	// copy blends
-	for (i = 0; i < 2; i++)
-		player_params[id].prevblending[i] = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id].blending[i];
-
-#if 0
-	auto len = (player_params[id].m_prevgaitorigin - player_params[id].origin).Length();
-	if (host_id == 0)
-	{
-		if (len)
-		{
-			UTIL_ServerPrint("%d | %f %f | %f %f %f | %f %f %f\n", _host_client->netchan.outgoing_sequence, len, player_params[id].gaityaw, player_params[id].m_prevgaitorigin[0], player_params[id].m_prevgaitorigin[1], player_params[id].m_prevgaitorigin[2], player_params[id].origin[0], player_params[id].origin[1], player_params[id].origin[2]);
-		}
-	}
-	UTIL_ServerPrint("do %f\n", player_params[id].angles[1]);
-#endif
-	if (player_params[id].gaitsequence)
-	{
-		StudioProcessGait(id);
-	}
-	else
-	{
-		player_params[id].controller[0] = 127;
-		player_params[id].controller[1] = 127;
-		player_params[id].controller[2] = 127;
-		player_params[id].controller[3] = 127;
-		player_params[id].prevcontroller[0] = player_params[id].controller[0];
-		player_params[id].prevcontroller[1] = player_params[id].controller[1];
-		player_params[id].prevcontroller[2] = player_params[id].controller[2];
-		player_params[id].prevcontroller[3] = player_params[id].controller[3];
-
-		CalculatePitchBlend(id);
-		CalculateYawBlend(id);
-	}
+	ProcessAnimParams(id, _host_client->lastcmd.msec * 0.001f, player_params[id], 
+		player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)], 
+		state, host);
 
 	player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence + 1)][id] = player_params[id];
 	player_params[id] = save;
@@ -677,7 +862,11 @@ int Server_GetBlendingInterface(int version, struct sv_blending_interface_s** pp
 	if (version != SV_BLENDING_INTERFACE_VERSION)
 		return 0;
 
-	(*ppinterface)->SV_StudioSetupBones = decltype((*ppinterface)->SV_StudioSetupBones)(SV_StudioSetupBones);
+	if(g_eGameType == GT_CStrike || g_eGameType == GT_CZero)
+		(*ppinterface)->SV_StudioSetupBones = decltype((*ppinterface)->SV_StudioSetupBones)(CS_StudioSetupBones);
+	else
+		(*ppinterface)->SV_StudioSetupBones = decltype((*ppinterface)->SV_StudioSetupBones)(HL_StudioSetupBones);
+
 
 	IEngineStudio.Mem_Calloc = pstudio->Mem_Calloc;
 	IEngineStudio.Cache_Check = pstudio->Cache_Check;
@@ -747,7 +936,43 @@ bool OnMetaAttach()
 	phf_hitbox_fix = CVAR_GET_POINTER(hf_hitbox_fix.name);
 	HF_Init_Config();
 	HF_Exec_Config();
-	
+
+	char gameDir[512];
+	GET_GAME_DIR(gameDir);
+	char* a = gameDir;
+	int i = 0;
+
+	while (gameDir[i])
+		if (gameDir[i++] == '/')
+			a = &gameDir[i];
+
+	if (g_eGameType == GT_Unitialized)
+	{
+		if (!strcmp(a, "valve"))
+		{
+			g_eGameType = GT_HL1;
+		}
+		else if (!strcmp(a, "cstrike") || !strcmp(a, "cstrike_beta"))
+		{
+			g_eGameType = GT_CStrike;
+		}
+		else if (!strcmp(a, "czero"))
+		{
+			g_eGameType = GT_CZero;
+		}
+		else if (!strcmp(a, "czeror"))
+		{
+			g_eGameType = GT_CZeroRitual;
+		}
+		else if (!strcmp(a, "terror"))
+		{
+			g_eGameType = GT_TerrorStrike;
+		}
+		else if (!strcmp(a, "tfc"))
+		{
+			g_eGameType = GT_TFC;
+		}
+	}
 
 #if 1
 #if defined(__linux__) || defined(__APPLE__)

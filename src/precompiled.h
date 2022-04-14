@@ -50,7 +50,8 @@
 #endif
 
 extern int UTIL_ReadFlags(const char* c);
-extern void SV_StudioSetupBones(model_t* pModel, float frame, int sequence, const vec_t* angles, const vec_t* origin, const byte* pcontroller, const byte* pblending, int iBone, const edict_t* pEdict);
+extern void CS_StudioSetupBones(model_t* pModel, float frame, int sequence, const vec_t* angles, const vec_t* origin, const byte* pcontroller, const byte* pblending, int iBone, const edict_t* pEdict);
+extern void HL_StudioSetupBones(model_t* pModel, float frame, int sequence, const vec_t* angles, const vec_t* origin, const byte* pcontroller, const byte* pblending, int iBone, const edict_t* pEdict);
 extern void (PlayerPreThinkPre)(edict_t* pEntity);
 extern void (PlayerPostThinkPost)(edict_t* pEntity);
 extern void (UpdateClientDataPost) (const struct edict_s* ent, int sendweapons, struct clientdata_s* cd);
@@ -59,3 +60,16 @@ extern void (PutInServer)	(edict_t* pEntity);
 extern sv_blending_interface_s orig_interface;
 extern cvar_t* phf_hitbox_fix;
 void UTIL_ServerPrint(const char* fmt, ...);
+
+enum GameType_e
+{
+	GT_Unitialized,
+	GT_CZero,
+	GT_CZeroRitual,
+	GT_TerrorStrike,
+	GT_TFC,
+	GT_HL1,
+	GT_CStrike
+};
+
+extern GameType_e g_eGameType;
