@@ -42,8 +42,10 @@ struct player_anim_params_hist_s
 player_anim_params_hist_s player_params_history[MAX_CLIENTS]{};
 player_anim_params_s player_params[MAX_CLIENTS]{};
 
-subhook_t Server_GetBlendingInterfaceHook;
-subhook_t SV_SendClientDatagramHook;
+subhook_t Server_GetBlendingInterfaceHook{};
+
+subhook_t GetProcAddressHook{};
+subhook_t dlsymHook{};
 void (PutInServer)(edict_t* pEntity)
 {
 	if (!pEntity)
@@ -77,7 +79,7 @@ void VectorMA(const vec_t* veca, float scale, const vec_t* vecm, vec_t* out)
 
 void (PlayerPreThinkPre)(edict_t* pEntity)
 {
-	auto host_id = ENTINDEX(pEntity)-1;
+	auto host_id = ENTINDEX(pEntity) - 1;
 	auto _host_client = g_RehldsSvs->GetClient_t(host_id);
 	client_t* cl;
 	float cl_interptime;
@@ -114,7 +116,7 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 		cl = g_RehldsSvs->GetClient_t(i);
 		if (cl == _host_client || !cl->active)
 			continue;
-			
+
 		truepositions[i].active = 1;
 		truepositions[i].extra = player_params[i];
 	}
@@ -217,15 +219,15 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 			UTIL_ServerPrint("\n\n\nDEBUG AT %p | %p \n\n\n", &g_pRotationMatrixCopy, &g_pBoneTransformCopy);
 		}
 		if (i == 1 && cl->edict->v.modelindex)
-		{			
+		{
 			auto model = g_RehldsApi->GetServerData()->GetModel(cl->edict->v.modelindex);
-			
+
 			SV_StudioSetupBones(
 				model,
 				cl->edict->v.frame,
 				cl->edict->v.sequence,
 				cl->edict->v.angles,
-				cl->edict->v.origin,				
+				cl->edict->v.origin,
 				cl->edict->v.controller,
 				cl->edict->v.blending,
 				-1,
@@ -354,7 +356,7 @@ void CalculatePitchBlend(int index)
 
 	StudioPlayerBlend(&iBlend, &player_params[index].angles.x);
 
-	
+
 	player_params[index].prevangles.x = player_params[index].angles.x;
 	player_params[index].blending[1] = iBlend;
 	player_params[index].prevblending[1] = player_params[index].blending[1];
@@ -508,14 +510,14 @@ void HL_StudioProcessGait(int index)
 	}
 
 
-	studiohdr_t* pstudiohdr = (studiohdr_t*)GET_MODEL_PTR(ent);
+	g_pstudiohdr = (studiohdr_t*)GET_MODEL_PTR(ent);
 
-	if (!pstudiohdr)
+	if (!g_pstudiohdr)
 		return;
 
-	pseqdesc = (mstudioseqdesc_t*)((byte*)pstudiohdr + pstudiohdr->seqindex) + player_params[index].sequence;
+	pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + player_params[index].sequence;
 
-	if (player_params[index].sequence >= pstudiohdr->numseq)
+	if (player_params[index].sequence >= g_pstudiohdr->numseq)
 		player_params[index].sequence = 0;
 
 	float dt = player_params[index].m_clTime - player_params[index].m_clOldTime;
@@ -526,7 +528,7 @@ void HL_StudioProcessGait(int index)
 	else if (dt > 1.0)
 		dt = 1;
 
-	pseqdesc = (mstudioseqdesc_t*)((byte*)pstudiohdr + pstudiohdr->seqindex) + player_params[index].sequence;
+	pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + player_params[index].sequence;
 
 	HL_StudioPlayerBlend(pseqdesc, &iBlend, &player_params[index].angles[0]);
 
@@ -826,8 +828,8 @@ int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict
 	auto id = ENTINDEX(ent) - 1;
 	auto save = player_params[id];
 
-	ProcessAnimParams(id, _host_client->lastcmd.msec * 0.001f, player_params[id], 
-		player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)], 
+	ProcessAnimParams(id, _host_client->lastcmd.msec * 0.001f, player_params[id],
+		player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)],
 		state, host);
 
 	player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence + 1)][id] = player_params[id];
@@ -855,14 +857,17 @@ int (*Server_GetBlendingInterfaceOrig)(int version, struct sv_blending_interface
 int Server_GetBlendingInterface(int version, struct sv_blending_interface_s** ppinterface, struct engine_studio_api_s* pstudio, float* rotationmatrix, float* bonetransform)
 {
 	orig_ppinterface = ppinterface;
-	subhook_remove(Server_GetBlendingInterfaceHook);
-	Server_GetBlendingInterfaceOrig(version, ppinterface, pstudio, rotationmatrix, bonetransform);
+	if(Server_GetBlendingInterfaceHook)
+		subhook_remove(Server_GetBlendingInterfaceHook);
+	if(Server_GetBlendingInterfaceOrig)
+		Server_GetBlendingInterfaceOrig(version, ppinterface, pstudio, rotationmatrix, bonetransform);
 	orig_interface = **ppinterface;
-	subhook_install(Server_GetBlendingInterfaceHook);
+	if(Server_GetBlendingInterfaceHook)
+		subhook_install(Server_GetBlendingInterfaceHook);
 	if (version != SV_BLENDING_INTERFACE_VERSION)
 		return 0;
 
-	if(g_eGameType == GT_CStrike || g_eGameType == GT_CZero)
+	if (g_eGameType == GT_CStrike || g_eGameType == GT_CZero)
 		(*ppinterface)->SV_StudioSetupBones = decltype((*ppinterface)->SV_StudioSetupBones)(CS_StudioSetupBones);
 	else
 		(*ppinterface)->SV_StudioSetupBones = decltype((*ppinterface)->SV_StudioSetupBones)(HL_StudioSetupBones);
@@ -919,6 +924,38 @@ bool HF_Init_Config()
 	return true;
 }
 
+#if defined(__linux__) || defined(__APPLE__)
+void* dlsym_hook(void* __restrict __handle,
+	const char* __restrict __name)
+{
+	subhook_remove(dlsymHook);
+	auto ret = dlsym(__handle, __name);
+	if (!strcmp(__name, "Server_GetBlendingInterface"))
+	{
+		ret = (void*)Server_GetBlendingInterface;
+	}
+	subhook_install(dlsymHook);
+
+	return ret;
+}
+
+#else
+
+FARPROC WINAPI GetProcAddressHooked(
+	_In_ HMODULE hModule,
+	_In_ LPCSTR lpProcName)
+{
+	subhook_remove(GetProcAddressHook);
+	auto ret = GetProcAddress(hModule, lpProcName);
+	if (!strcmp(lpProcName, "Server_GetBlendingInterface"))
+	{
+		ret = (FARPROC)Server_GetBlendingInterface;
+	}
+	subhook_install(GetProcAddressHook);
+
+	return ret;
+}
+#endif
 bool OnMetaAttach()
 {
 	if (Init)
@@ -986,23 +1023,54 @@ bool OnMetaAttach()
 
 #if 1
 #if defined(__linux__) || defined(__APPLE__)
-	
-	
+
+
 	ModuleInfo info = Handles::GetModuleInfo(linux_game_library.c_str());
 	Server_GetBlendingInterfaceOrig = decltype(Server_GetBlendingInterfaceOrig)(dlsym(info.handle, "Server_GetBlendingInterface"));
-
-	Server_GetBlendingInterfaceHook = subhook_new(
-		(void*)Server_GetBlendingInterfaceOrig, (void*)Server_GetBlendingInterface, (subhook_flags_t)0);
-	subhook_install(Server_GetBlendingInterfaceHook);
-		
+	if (Server_GetBlendingInterfaceOrig)
+	{
+		Server_GetBlendingInterfaceHook = subhook_new(
+			(void*)Server_GetBlendingInterfaceOrig, (void*)Server_GetBlendingInterface, (subhook_flags_t)0);
+		subhook_install(Server_GetBlendingInterfaceHook);
+	}
+	else
+	{
+		dlsymHook = subhook_new(
+			(void*)dlsym, (void*)dlsym_hook, (subhook_flags_t)0);
+		subhook_install(dlsymHook);
+	}
 
 #else
 	Server_GetBlendingInterfaceOrig = decltype(Server_GetBlendingInterfaceOrig)(GetProcAddress((HMODULE)GetModuleHandleA(game_library.c_str()), "Server_GetBlendingInterface"));
+	if (Server_GetBlendingInterfaceOrig)
+	{
+		Server_GetBlendingInterfaceHook = subhook_new(
+			(void*)Server_GetBlendingInterfaceOrig, (void*)Server_GetBlendingInterface, (subhook_flags_t)0);
+		subhook_install(Server_GetBlendingInterfaceHook);
+	}
+	else
+	{
+#if 0
+		auto func = g_engfuncs.pfnGetBonePosition;
+		auto SV_SetupBonesfunc = 0;
+		for (byte* pos = (byte*)func, *end = (byte*)((DWORD)func + 512); pos < end; pos++)
+		{
+			/* .text:049A18FE FF D0                                   call    eax */
+			if (*pos == 0xff && *(pos + 1) == 0xd0)
+			{
+				orig_ppinterface = decltype(orig_ppinterface)(*(DWORD*)(pos - 7));
 
-	Server_GetBlendingInterfaceHook = subhook_new(
-		(void*)Server_GetBlendingInterfaceOrig, (void*)Server_GetBlendingInterface, (subhook_flags_t)0);
-	subhook_install(Server_GetBlendingInterfaceHook);
-	
+			}
+		}
+		if (orig_ppinterface && (*orig_ppinterface)->version == 0x1)
+		{
+		}
+#endif
+		GetProcAddressHook = subhook_new(
+			(void*)GetProcAddress, (void*)GetProcAddressHooked, (subhook_flags_t)0);
+		subhook_install(GetProcAddressHook);
+
+	}
 #endif
 #endif
 	Init = true;
