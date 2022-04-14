@@ -1,4 +1,4 @@
-# Hitbox Fixer ![C/C++ CI](https://github.com/Garey27/hitbox_fixer/actions/workflows/cmake.yml/badge.svg)
+# Hitbox Fixer ![C/C++ CI](https://github.com/Garey27/hitbox_fixer/workflows/CMake/badge.svg)
 This module fixes incorrect player server-side hitboxes in Counter-Strike 1.6.
 ## Requirements
 * [REHLDS](https://github.com/dreamstalker/rehlds/releases) version 3.11 or above 
