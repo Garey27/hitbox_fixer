@@ -946,10 +946,15 @@ bool OnMetaAttach()
 		if (gameDir[i++] == '/')
 			a = &gameDir[i];
 
+	std::string linux_game_library = "cs.so";
+	std::string game_library = "mp.dll";
+
 	if (g_eGameType == GT_Unitialized)
 	{
 		if (!strcmp(a, "valve"))
 		{
+			game_library = "hl.dll";
+			linux_game_library = "hl.so";
 			g_eGameType = GT_HL1;
 		}
 		else if (!strcmp(a, "cstrike") || !strcmp(a, "cstrike_beta"))
@@ -973,12 +978,17 @@ bool OnMetaAttach()
 			g_eGameType = GT_TFC;
 		}
 	}
+	if (g_eGameType != GT_CZero && g_eGameType != GT_CStrike && g_eGameType != GT_HL1)
+	{
+		UTIL_ServerPrint("Hitbox fixer is not ready for your mod. (%s). Create issue on github [https://github.com/Garey27/hitbox_fixer] if you wanna see support for this game.", game_library.c_str());
+		return false;
+	}
 
 #if 1
 #if defined(__linux__) || defined(__APPLE__)
 	
 	
-	ModuleInfo info = Handles::GetModuleInfo("cs.so");
+	ModuleInfo info = Handles::GetModuleInfo(linux_game_library.c_str());
 	Server_GetBlendingInterfaceOrig = decltype(Server_GetBlendingInterfaceOrig)(dlsym(info.handle, "Server_GetBlendingInterface"));
 
 	Server_GetBlendingInterfaceHook = subhook_new(
@@ -987,8 +997,7 @@ bool OnMetaAttach()
 		
 
 #else
-	
-	Server_GetBlendingInterfaceOrig = decltype(Server_GetBlendingInterfaceOrig)(GetProcAddress((HMODULE)GetModuleHandleA("mp.dll"), "Server_GetBlendingInterface"));
+	Server_GetBlendingInterfaceOrig = decltype(Server_GetBlendingInterfaceOrig)(GetProcAddress((HMODULE)GetModuleHandleA(game_library.c_str()), "Server_GetBlendingInterface"));
 
 	Server_GetBlendingInterfaceHook = subhook_new(
 		(void*)Server_GetBlendingInterfaceOrig, (void*)Server_GetBlendingInterface, (subhook_flags_t)0);
