@@ -222,7 +222,7 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 		{
 			auto model = g_RehldsApi->GetServerData()->GetModel(cl->edict->v.modelindex);
 
-			SV_StudioSetupBones(
+			HL_StudioSetupBones(
 				model,
 				cl->edict->v.frame,
 				cl->edict->v.sequence,
@@ -500,7 +500,7 @@ StudioProcessGait
 void HL_StudioProcessGait(int index)
 {
 	mstudioseqdesc_t* pseqdesc;
-	int		iBlend;
+	int		iBlend{};
 	float		flYaw; // view direction relative to movement
 
 	auto ent = INDEXENT(index + 1);
@@ -529,6 +529,7 @@ void HL_StudioProcessGait(int index)
 		dt = 1;
 
 	pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + player_params[index].sequence;
+
 
 	HL_StudioPlayerBlend(pseqdesc, &iBlend, &player_params[index].angles[0]);
 
@@ -733,6 +734,7 @@ void ProcessAnimParams(int id, float frametime, player_anim_params_s& params, pl
 		if (player_params[id].gaitsequence)
 		{
 			StudioProcessGait(id);
+
 		}
 		else
 		{
@@ -754,6 +756,8 @@ void ProcessAnimParams(int id, float frametime, player_anim_params_s& params, pl
 		if (player_params[id].gaitsequence)
 		{
 			HL_StudioProcessGait(id);
+			//player_params[id].angles[0] = -player_params[id].angles[0]; // stupid quake bug
+			//player_params[id].angles[0] = 0.0f;
 		}
 		else
 		{
@@ -827,9 +831,9 @@ int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict
 	}
 	auto id = ENTINDEX(ent) - 1;
 	auto save = player_params[id];
-
+	player_params[id] = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence + 1)][id];
 	ProcessAnimParams(id, _host_client->lastcmd.msec * 0.001f, player_params[id],
-		player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)],
+		&player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id],
 		state, host);
 
 	player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence + 1)][id] = player_params[id];

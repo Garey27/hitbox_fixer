@@ -1060,6 +1060,7 @@ void EXT_FUNC HL_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 		static vec4_t	q1b[MAXSTUDIOBONES];
 		float		s;
 
+
 		pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + player_params[player].prevsequence;
 		panim = StudioGetAnim(pModel, pseqdesc);
 
@@ -1130,7 +1131,6 @@ void EXT_FUNC HL_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 			}
 		}
 	}
-
 	AngleMatrix(temp_angles, (*g_pRotationMatrix));
 
 	(*g_pRotationMatrix)[0][3] = origin[0];
