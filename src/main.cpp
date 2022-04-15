@@ -1004,6 +1004,12 @@ bool OnMetaAttach()
 			linux_game_library = "hl.so";
 			g_eGameType = GT_HL1;
 		}
+		else if (!strcmp(a, "ag"))
+		{
+			game_library = "ag.dll";
+			linux_game_library = "ag.so";
+			g_eGameType = GT_HL1;
+		}
 		else if (!strcmp(a, "cstrike") || !strcmp(a, "cstrike_beta"))
 		{
 			g_eGameType = GT_CStrike;
