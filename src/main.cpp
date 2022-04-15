@@ -930,11 +930,14 @@ void* dlsym_hook(void* __restrict __handle,
 {
 	subhook_remove(dlsymHook);
 	auto ret = dlsym(__handle, __name);
-	if (!strcmp(__name, "Server_GetBlendingInterface"))
+	if (__name && !strcmp(__name, "Server_GetBlendingInterface"))
 	{
 		ret = (void*)Server_GetBlendingInterface;
 	}
-	subhook_install(dlsymHook);
+	else
+	{
+		subhook_install(dlsymHook);
+	}
 
 	return ret;
 }
@@ -947,11 +950,14 @@ FARPROC WINAPI GetProcAddressHooked(
 {
 	subhook_remove(GetProcAddressHook);
 	auto ret = GetProcAddress(hModule, lpProcName);
-	if (!strcmp(lpProcName, "Server_GetBlendingInterface"))
+	if (lpProcName && !strcmp(lpProcName, "Server_GetBlendingInterface"))
 	{
 		ret = (FARPROC)Server_GetBlendingInterface;
 	}
-	subhook_install(GetProcAddressHook);
+	else
+	{
+		subhook_install(GetProcAddressHook);
+	}
 
 	return ret;
 }
