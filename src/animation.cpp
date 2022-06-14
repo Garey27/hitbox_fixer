@@ -1182,10 +1182,10 @@ void EXT_FUNC CS_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 		orig_interface.SV_StudioSetupBones(pModel, frame, sequence, angles, origin, pcontroller, pblending, iBone, pEdict);
 		return;
 	}
-	
-	if (ENTINDEX(pEdict) <= g_RehldsSvs->GetMaxClients())
+	auto entId = ENTINDEX(pEdict);
+	if (entId > 0 && entId <= g_RehldsSvs->GetMaxClients())
 	{
-		player = ENTINDEX(pEdict) - 1;
+		player = entId - 1;
 		sequence = player_params[player].sequence;
 		frame = player_params[player].frame;
 		temp_angles = player_params[player].angles;
