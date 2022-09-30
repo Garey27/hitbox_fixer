@@ -1,6 +1,4 @@
 #include "precompiled.h"
-#include "handles.h"
-#include "patternscan.h"
 
 #if defined(__linux__) || defined(__APPLE__)
 #define __fastcall
@@ -12,20 +10,19 @@ cvar_t* sv_unlagpush;
 cvar_t hf_hitbox_fix = { "hbf_enabled", "1", FCVAR_SERVER | FCVAR_PROTECTED, 0.0f, NULL };
 cvar_t* phf_hitbox_fix;
 char g_ExecConfigCmd[MAX_PATH];
-
+std::unique_ptr<players_api> api;
 GameType_e g_eGameType;
 const char CFG_FILE[] = "hbf.cfg";
 extern server_studio_api_t IEngineStudio;
 extern studiohdr_t* g_pstudiohdr;
 extern float(*g_pRotationMatrix)[3][4];
 extern float(*g_pBoneTransform)[128][3][4];
-void StudioProcessGait(int index);
+extern void CS_StudioProcessParams(int player, player_anim_params_s& params);
 sv_blending_interface_s** orig_ppinterface;
 sv_blending_interface_s orig_interface;
 // Resource counts
 #define MAX_MODEL_INDEX_BITS		9	// sent as a short
 #define MAX_MODELS			(1<<MAX_MODEL_INDEX_BITS)
-
 qboolean nofind;
 typedef int(*SV_BLENDING_INTERFACE_FUNC)(int, struct sv_blending_interface_s**, struct server_studio_api_s*, float*, float*);
 
@@ -46,6 +43,16 @@ subhook_t Server_GetBlendingInterfaceHook{};
 
 subhook_t GetProcAddressHook{};
 subhook_t dlsymHook{};
+//#define DEBUG
+#ifdef DEBUG
+
+cvar_t hbf_timescale = { "hbf_timescale", "1", FCVAR_SERVER | FCVAR_PROTECTED, 0.0f, NULL };
+cvar_t* phbf_timescale;
+bool TestingHitboxes = false;
+uintptr_t TestingSequence;
+float(g_pRotationMatrixCopy)[3][4];
+float(g_pBoneTransformCopy)[128][3][4];
+#endif
 void (PutInServer)(edict_t* pEntity)
 {
 	if (!pEntity)
@@ -75,25 +82,53 @@ void VectorMA(const vec_t* veca, float scale, const vec_t* vecm, vec_t* out)
 	out[1] = scale * vecm[1] + veca[1];
 	out[2] = scale * vecm[2] + veca[2];
 }
+#ifdef DEBUG
+void TestFunc(uint32_t host_id, float t, float frac, uintptr_t sequence)
+{
+	auto _host_client = api->GetClient(host_id);
+	if (TestingHitboxes)
+	{
 
+		char msg[1024];
+		snprintf(msg, 1024, "%.2f %.2f | %.2f %.2f\n", t, frac, player_params_history[host_id].hist[SV_UPDATE_MASK & sequence][1].t, player_params_history[host_id].hist[SV_UPDATE_MASK & sequence][1].frac);
+		g_engfuncs.pfnServerPrint(msg);
+	}
+	for (int i = 0; i < api->GetMaxClients(); i++)
+	{
+		auto cl = api->GetClient(i);
+		player_params[i] = player_params_history[host_id].hist[SV_UPDATE_MASK & sequence][i];
+		if (cl == _host_client || !cl->active)
+			continue;
 
+		auto model = api->GetModel(cl->edict->v.modelindex);
+		CS_StudioSetupBones(
+			model,
+			cl->edict->v.frame,
+			cl->edict->v.sequence,
+			cl->edict->v.angles,
+			cl->edict->v.origin,
+			cl->edict->v.controller,
+			cl->edict->v.blending,
+			-1,
+			cl->edict);
+		memcpy(&g_pRotationMatrixCopy, g_pRotationMatrix, sizeof(g_pRotationMatrixCopy));
+		memcpy(&g_pBoneTransformCopy, g_pBoneTransform, sizeof(g_pBoneTransformCopy));
+	}
+}
+#endif
 void (PlayerPreThinkPre)(edict_t* pEntity)
 {
 	auto host_id = ENTINDEX(pEntity) - 1;
-	auto _host_client = g_RehldsSvs->GetClient_t(host_id);
+	auto _host_client = api->GetClient(host_id);
 	client_t* cl;
-	float cl_interptime;
-	client_frame_t* nextFrame;
+	float cl_interptime = 0.f;
 	entity_state_t* state;
 	sv_adjusted_positions_t* pos;
-	float frac;
 	int i;
 	client_frame_t* frame;
-	player_anim_params_s(*histframe)[32];
-	player_anim_params_s(*nexthistframe)[32];
 	vec3_t origin;
 	vec3_t delta;
-	float realtime = g_RehldsFuncs->GetRealTime();
+	float realtime = g_engfuncs.pfnTime();
 	double targettime; // FP precision fix
 	vec3_t angles;
 	vec3_t mins;
@@ -101,52 +136,30 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 
 	memset(truepositions, 0, sizeof(truepositions));
 	nofind = 1;
+	if (_host_client->fakeclient)
+		RETURN_META(MRES_IGNORED);
+
 	if (!MDLL_AllowLagCompensation())
 		RETURN_META(MRES_IGNORED);
 
 	if (sv_unlag->value == 0.0f || !_host_client->lw || !_host_client->lc)
 		RETURN_META(MRES_IGNORED);
 
-	if (g_RehldsSvs->GetMaxClients() <= 1 || !_host_client->active)
+	if (api->GetMaxClients() <= 1 || !_host_client->active)
 		RETURN_META(MRES_IGNORED);
 
+
 	nofind = 0;
-	for (int i = 0; i < g_RehldsSvs->GetMaxClients(); i++)
+	for (int i = 0; i < api->GetMaxClients(); i++)
 	{
-		cl = g_RehldsSvs->GetClient_t(i);
+		cl = api->GetClient(i);
 		if (cl == _host_client || !cl->active)
 			continue;
 
 		truepositions[i].active = 1;
 		truepositions[i].extra = player_params[i];
 	}
-
-	float clientLatency = _host_client->latency;
-	if (clientLatency > 1.5)
-		clientLatency = 1.5f;
-
-	if (sv_maxunlag->value != 0.0f)
-	{
-		if (sv_maxunlag->value < 0.0)
-			sv_maxunlag->value = 0.f;
-
-		if (clientLatency >= sv_maxunlag->value)
-			clientLatency = sv_maxunlag->value;
-	}
-
-	cl_interptime = _host_client->lastcmd.lerp_msec / 1000.0f;
-
-	if (cl_interptime > 0.1)
-		cl_interptime = 0.1f;
-
-	if (_host_client->next_messageinterval > cl_interptime)
-		cl_interptime = (float)_host_client->next_messageinterval;
-
-	// FP Precision fix (targettime is double there, not float)
-	targettime = realtime - clientLatency - cl_interptime + sv_unlagpush->value;
-
-	if (targettime > realtime)
-		targettime = realtime;
+	
 
 	if (SV_UPDATE_BACKUP <= 0)
 	{
@@ -155,45 +168,21 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 		RETURN_META(MRES_IGNORED);
 	}
 
-	frame = nextFrame = NULL;
-	histframe = nexthistframe = NULL;
-	for (i = 0; i < SV_UPDATE_BACKUP; i++, frame = nextFrame, histframe = nexthistframe)
-	{
-		nextFrame = &_host_client->frames[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence + ~i)];
-		nexthistframe = &player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence + ~i)];
-		if (targettime >= nextFrame->senttime)
-			break;
-	}
+	size_t frame_index = SV_UPDATE_MASK & (_host_client->netchan.incoming_acknowledged);
+	frame = &_host_client->frames[frame_index];
 
-	if (i >= SV_UPDATE_BACKUP || targettime - nextFrame->senttime > 1.0)
+	for (i = 0; i < frame->entities.num_entities; i++)
 	{
-		memset(truepositions, 0, sizeof(truepositions));
-		nofind = 1;
-		RETURN_META(MRES_IGNORED);
-	}
-
-	if (!frame)
-	{
-		frame = nextFrame;
-		histframe = nexthistframe;
-		frac = 0.0;
-	}
-	else
-	{
-	}
-
-	for (i = 0; i < nextFrame->entities.num_entities; i++)
-	{
-		state = &nextFrame->entities.entities[i];
+		state = &frame->entities.entities[i];
 
 		if (state->number <= 0)
 			continue;
 
-		if (state->number > g_RehldsSvs->GetMaxClients())
+		if (state->number > api->GetMaxClients())
 			break; // players are always in the beginning of the list, no need to look more
 
 
-		cl = g_RehldsSvs->GetClient_t(state->number - 1);
+		cl = api->GetClient(state->number - 1);
 		if (cl == _host_client || !cl->active)
 			continue;
 
@@ -206,23 +195,30 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 			continue;
 		}
 
-
-		player_params[state->number - 1] = (*nexthistframe)[state->number - 1];
-		pos->needrelink = 1;
-#if 0
-		static float(g_pRotationMatrixCopy)[3][4];
-		static float(g_pBoneTransformCopy)[128][3][4];
 		static bool Init = false;
+		player_params[state->number - 1] = player_params_history[host_id].hist[frame_index][state->number - 1];
+		
+		pos->needrelink = 1;
+#ifdef DEBUG
 		if (!Init)
 		{
 			Init = true;
-			UTIL_ServerPrint("\n\n\nDEBUG AT %p | %p \n\n\n", &g_pRotationMatrixCopy, &g_pBoneTransformCopy);
+			//UTIL_ServerPrint("\n\n\nDEBUG AT %p | %p \n\n\n", &g_pRotationMatrixCopy, &g_pBoneTransformCopy);
+			g_engfuncs.pfnClientCommand(pEntity, "hbdeb_test_rot_matrix %x \n", &g_pRotationMatrixCopy);
+			g_engfuncs.pfnClientCommand(pEntity, "hbdeb_test_transform %x \n", &g_pBoneTransformCopy);
+			g_engfuncs.pfnClientCommand(pEntity, "hbdeb_test_hitboxes %x \n", &TestingHitboxes);
+			g_engfuncs.pfnClientCommand(pEntity, "hbdeb_test_sequence %x \n", (uintptr_t)TestFunc);
+			g_engfuncs.pfnClientCommand(pEntity, "r_drawentities 6 \n", &TestingHitboxes);
+			g_engfuncs.pfnAddServerCommand("test_hb", [] {
+				TestingHitboxes = !TestingHitboxes;
+				});
 		}
+#if 0
 		if (i == 1 && cl->edict->v.modelindex)
 		{
-			auto model = g_RehldsApi->GetServerData()->GetModel(cl->edict->v.modelindex);
-
-			HL_StudioSetupBones(
+			auto model = api->GetModel(cl->edict->v.modelindex);
+		
+			CS_StudioSetupBones(
 				model,
 				cl->edict->v.frame,
 				cl->edict->v.sequence,
@@ -232,21 +228,21 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 				cl->edict->v.blending,
 				-1,
 				cl->edict);
-			memcpy(&g_pRotationMatrixCopy, g_pRotationMatrix, sizeof(g_pRotationMatrixCopy));
-			memcpy(&g_pBoneTransformCopy, g_pBoneTransform, sizeof(g_pBoneTransformCopy));
+
 		}
+#endif
 #endif
 	}
 	RETURN_META(MRES_IGNORED);
 }
 
 
-void StudioEstimateGait(int index)
+void StudioEstimateGait(player_anim_params_s& params)
 {
 	float dt;
 	Vector est_velocity;
 
-	dt = player_params[index].m_clTime - player_params[index].m_clOldTime;
+	dt = params.m_clTime - params.m_clOldTime;
 
 	if (dt < 0)
 		dt = 0;
@@ -256,26 +252,28 @@ void StudioEstimateGait(int index)
 
 	if (dt == 0)
 	{
-		player_params[index].m_flGaitMovement = 0;
+		params.m_flGaitMovement = 0;
 		return;
 	}
 
-	est_velocity = player_params[index].origin - player_params[index].m_prevgaitorigin;
-	player_params[index].m_prevgaitorigin = player_params[index].origin;
+	est_velocity = params.final_origin - params.m_prevgaitorigin;
+	params.m_prevgaitorigin = params.final_origin;
 
-	player_params[index].m_flGaitMovement = est_velocity.Length();
-
-	if (dt <= 0 || player_params[index].m_flGaitMovement / dt < 5)
+	params.m_flGaitMovement = est_velocity.Length();
+	
+	if (dt <= 0 || params.m_flGaitMovement / dt < 5)
 	{
-		player_params[index].m_flGaitMovement = 0;
+		params.m_flGaitMovement = 0;
 
 		est_velocity.x = 0;
 		est_velocity.y = 0;
 	}
 
-	float flYaw = player_params[index].angles.y - player_params[index].gaityaw;
-	if (player_params[index].sequence > 100) {
-		player_params[index].gaityaw += flYaw;
+	float flYaw = params.final_angles.y - params.gaityaw;
+
+
+	if (params.sequence > 100) {
+		params.gaityaw += flYaw;
 		return;
 	}
 	if (!est_velocity.x && !est_velocity.y)
@@ -297,32 +295,32 @@ void StudioEstimateGait(int index)
 			flYaw -= 360;
 
 		if (flYaw > -5.0 && flYaw < 5.0)
-			player_params[index].m_flYawModifier = 0.05;
+			params.m_flYawModifier = 0.05;
 
 		if (flYaw < -90.0 || flYaw > 90.0)
-			player_params[index].m_flYawModifier = 3.5;
+			params.m_flYawModifier = 3.5;
 
 		if (dt < 0.25)
-			flYawDiff *= dt * player_params[index].m_flYawModifier;
+			flYawDiff *= dt * params.m_flYawModifier;
 		else
 			flYawDiff *= dt;
 
 		if (abs(flYawDiff) < 0.1)
 			flYawDiff = 0;
 
-		player_params[index].gaityaw += flYawDiff;
-		player_params[index].gaityaw = player_params[index].gaityaw - (int)(player_params[index].gaityaw / 360) * 360;
-		player_params[index].m_flGaitMovement = 0;
+		params.gaityaw += flYawDiff;
+		params.gaityaw = params.gaityaw - (int)(params.gaityaw / 360) * 360;
+		params.m_flGaitMovement = 0;
 	}
 	else
 	{
-		player_params[index].gaityaw = (atan2(est_velocity.y, est_velocity.x) * (180 / M_PI));
+		params.gaityaw = (atan2(est_velocity.y, est_velocity.x) * (180 / M_PI));
 
-		if (player_params[index].gaityaw > 180)
-			player_params[index].gaityaw = 180;
+		if (params.gaityaw > 180)
+			params.gaityaw = 180;
 
-		if (player_params[index].gaityaw < -180)
-			player_params[index].gaityaw = -180;
+		if (params.gaityaw < -180)
+			params.gaityaw = -180;
 	}
 }
 
@@ -350,26 +348,26 @@ void StudioPlayerBlend(int* pBlend, float* pPitch)
 	}
 }
 
-void CalculatePitchBlend(int index)
+void CalculatePitchBlend(player_anim_params_s& params)
 {
 	int iBlend;
 
-	StudioPlayerBlend(&iBlend, &player_params[index].angles.x);
+	StudioPlayerBlend(&iBlend, &params.final_angles.x);
 
 
-	player_params[index].prevangles.x = player_params[index].angles.x;
-	player_params[index].blending[1] = iBlend;
-	player_params[index].prevblending[1] = player_params[index].blending[1];
-	player_params[index].prevseqblending[1] = player_params[index].blending[1];
+	params.prevangles.x = params.final_angles.x;
+	params.blending[1] = iBlend;
+	params.prevblending[1] = params.blending[1];
+	params.prevseqblending[1] = params.blending[1];
 
 }
 
-void CalculateYawBlend(int index)
+void CalculateYawBlend(player_anim_params_s& params)
 {
-	StudioEstimateGait(index);
+	StudioEstimateGait(params);
 
 	// calc side to side turning
-	float flYaw = fmod(player_params[index].angles[1] - player_params[index].gaityaw, 360.0f);
+	float flYaw = fmod(params.final_angles[1] - params.gaityaw, 360.0f);
 
 	if (flYaw < -180)
 		flYaw += 360;
@@ -377,19 +375,19 @@ void CalculateYawBlend(int index)
 	else if (flYaw > 180)
 		flYaw -= 360;
 
-	if (player_params[index].m_flGaitMovement)
+	if (params.m_flGaitMovement)
 	{
 		float maxyaw = 120.0;
 		if (flYaw > maxyaw)
 		{
-			player_params[index].gaityaw -= 180;
-			player_params[index].m_flGaitMovement = -player_params[index].m_flGaitMovement;
+			params.gaityaw -= 180;
+			params.m_flGaitMovement = -params.m_flGaitMovement;
 			flYaw -= 180;
 		}
 		else if (flYaw < -maxyaw)
 		{
-			player_params[index].gaityaw += 180;
-			player_params[index].m_flGaitMovement = -player_params[index].m_flGaitMovement;
+			params.gaityaw += 180;
+			params.m_flGaitMovement = -params.m_flGaitMovement;
 			flYaw += 180;
 		}
 	}
@@ -398,15 +396,15 @@ void CalculateYawBlend(int index)
 	blend_yaw = clamp<float>(blend_yaw, 0.0f, 255.0f);
 	blend_yaw = 255.0 - blend_yaw;
 
-	player_params[index].blending[0] = (int)(blend_yaw);
-	player_params[index].prevblending[0] = player_params[index].blending[0];
-	player_params[index].prevseqblending[0] = player_params[index].blending[0];
-	player_params[index].angles[1] = player_params[index].gaityaw;
+	params.blending[0] = (int)(blend_yaw);
+	params.prevblending[0] = params.blending[0];
+	params.prevseqblending[0] = params.blending[0];
+	params.final_angles[1] = params.gaityaw;
 
-	if (player_params[index].angles[1] < 0)
-		player_params[index].angles[1] += 360;
+	if (params.final_angles[1] < 0)
+		params.final_angles[1] += 360;
 
-	player_params[index].prevangles[1] = player_params[index].angles[1];
+	params.prevangles[1] = params.final_angles[1];
 }
 
 /*
@@ -443,10 +441,10 @@ void HL_StudioPlayerBlend(mstudioseqdesc_t* pseqdesc, int* pBlend, float* pPitch
 StudioEstimateGait
 ====================
 */
-void HL_StudioEstimateGait(int index)
+void HL_StudioEstimateGait(player_anim_params_s& params)
 {
 	vec3_t	est_velocity;
-	float dt = player_params[index].m_clTime - player_params[index].m_clOldTime;
+	float dt = params.m_clTime - params.m_clOldTime;
 
 	if (dt < 0.0)
 		dt = 0;
@@ -455,20 +453,20 @@ void HL_StudioEstimateGait(int index)
 		dt = 1;
 
 
-	VectorSubtract(player_params[index].origin, player_params[index].m_prevgaitorigin, est_velocity);
-	VectorCopy(player_params[index].origin, player_params[index].m_prevgaitorigin);
-	player_params[index].m_flGaitMovement = (est_velocity).Length();
+	VectorSubtract(params.final_origin, params.m_prevgaitorigin, est_velocity);
+	VectorCopy(params.final_origin, params.m_prevgaitorigin);
+	params.m_flGaitMovement = (est_velocity).Length();
 
-	if (dt <= 0.0f || player_params[index].m_flGaitMovement / dt < 5.0f)
+	if (dt <= 0.0f || params.m_flGaitMovement / dt < 5.0f)
 	{
-		player_params[index].m_flGaitMovement = 0.0f;
+		params.m_flGaitMovement = 0.0f;
 		est_velocity[0] = 0.0f;
 		est_velocity[1] = 0.0f;
 	}
 
 	if (est_velocity[1] == 0.0f && est_velocity[0] == 0.0f)
 	{
-		float	flYawDiff = player_params[index].angles[1] - player_params[index].gaityaw;
+		float	flYawDiff = params.final_angles[1] - params.gaityaw;
 
 		flYawDiff = flYawDiff - (int)(flYawDiff / 360) * 360;
 		if (flYawDiff > 180.0f) flYawDiff -= 360.0f;
@@ -478,16 +476,16 @@ void HL_StudioEstimateGait(int index)
 			flYawDiff *= dt * 4.0f;
 		else flYawDiff *= dt;
 
-		player_params[index].gaityaw += flYawDiff;
-		player_params[index].gaityaw = player_params[index].gaityaw - (int)(player_params[index].gaityaw / 360) * 360;
+		params.gaityaw += flYawDiff;
+		params.gaityaw = params.gaityaw - (int)(params.gaityaw / 360) * 360;
 
-		player_params[index].m_flGaitMovement = 0.0f;
+		params.m_flGaitMovement = 0.0f;
 	}
 	else
 	{
-		player_params[index].gaityaw = (atan2(est_velocity[1], est_velocity[0]) * 180 / M_PI);
-		if (player_params[index].gaityaw > 180.0f) player_params[index].gaityaw = 180.0f;
-		if (player_params[index].gaityaw < -180.0f) player_params[index].gaityaw = -180.0f;
+		params.gaityaw = (atan2(est_velocity[1], est_velocity[0]) * 180 / M_PI);
+		if (params.gaityaw > 180.0f) params.gaityaw = 180.0f;
+		if (params.gaityaw < -180.0f) params.gaityaw = -180.0f;
 	}
 
 }
@@ -497,13 +495,13 @@ void HL_StudioEstimateGait(int index)
 StudioProcessGait
 ====================
 */
-void HL_StudioProcessGait(int index)
+void HL_StudioProcessGait(player_anim_params_s& params)
 {
 	mstudioseqdesc_t* pseqdesc;
 	int		iBlend{};
 	float		flYaw; // view direction relative to movement
 
-	auto ent = INDEXENT(index + 1);
+	auto ent = INDEXENT(params.playerId);
 	if (!ent)
 	{
 		return;
@@ -515,12 +513,12 @@ void HL_StudioProcessGait(int index)
 	if (!g_pstudiohdr)
 		return;
 
-	pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + player_params[index].sequence;
+	pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + params.sequence;
 
-	if (player_params[index].sequence >= g_pstudiohdr->numseq)
-		player_params[index].sequence = 0;
+	if (params.sequence >= g_pstudiohdr->numseq)
+		params.sequence = 0;
 
-	float dt = player_params[index].m_clTime - player_params[index].m_clOldTime;
+	float dt = params.m_clTime - params.m_clOldTime;
 
 	if (dt < 0.0)
 		dt = 0;
@@ -528,70 +526,70 @@ void HL_StudioProcessGait(int index)
 	else if (dt > 1.0)
 		dt = 1;
 
-	pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + player_params[index].sequence;
+	pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + params.sequence;
 
 
-	HL_StudioPlayerBlend(pseqdesc, &iBlend, &player_params[index].angles[0]);
+	HL_StudioPlayerBlend(pseqdesc, &iBlend, &params.final_angles[0]);
 
-	player_params[index].prevangles[0] = player_params[index].angles[0];
-	player_params[index].blending[0] = iBlend;
-	player_params[index].prevblending[0] = player_params[index].blending[0];
-	player_params[index].prevseqblending[0] = player_params[index].blending[0];
-	HL_StudioEstimateGait(index);
+	params.prevangles[0] = params.final_angles[0];
+	params.blending[0] = iBlend;
+	params.prevblending[0] = params.blending[0];
+	params.prevseqblending[0] = params.blending[0];
+	HL_StudioEstimateGait(params);
 
 	// calc side to side turning
-	flYaw = player_params[index].angles[1] - player_params[index].gaityaw;
+	flYaw = params.final_angles[1] - params.gaityaw;
 	flYaw = flYaw - (int)(flYaw / 360) * 360;
 	if (flYaw < -180.0f) flYaw = flYaw + 360.0f;
 	if (flYaw > 180.0f) flYaw = flYaw - 360.0f;
 
 	if (flYaw > 120.0f)
 	{
-		player_params[index].gaityaw = player_params[index].gaityaw - 180.0f;
-		player_params[index].m_flGaitMovement = -player_params[index].m_flGaitMovement;
+		params.gaityaw = params.gaityaw - 180.0f;
+		params.m_flGaitMovement = -params.m_flGaitMovement;
 		flYaw = flYaw - 180.0f;
 	}
 	else if (flYaw < -120.0f)
 	{
-		player_params[index].gaityaw = player_params[index].gaityaw + 180.0f;
-		player_params[index].m_flGaitMovement = -player_params[index].m_flGaitMovement;
+		params.gaityaw = params.gaityaw + 180.0f;
+		params.m_flGaitMovement = -params.m_flGaitMovement;
 		flYaw = flYaw + 180.0f;
 	}
 
 	// adjust torso
-	player_params[index].controller[0] = ((flYaw / 4.0f) + 30.0f) / (60.0f / 255.0f);
-	player_params[index].controller[1] = ((flYaw / 4.0f) + 30.0f) / (60.0f / 255.0f);
-	player_params[index].controller[2] = ((flYaw / 4.0f) + 30.0f) / (60.0f / 255.0f);
-	player_params[index].controller[3] = ((flYaw / 4.0f) + 30.0f) / (60.0f / 255.0f);
-	player_params[index].prevcontroller[0] = player_params[index].controller[0];
-	player_params[index].prevcontroller[1] = player_params[index].controller[1];
-	player_params[index].prevcontroller[2] = player_params[index].controller[2];
-	player_params[index].prevcontroller[3] = player_params[index].controller[3];
+	params.controller[0] = ((flYaw / 4.0f) + 30.0f) / (60.0f / 255.0f);
+	params.controller[1] = ((flYaw / 4.0f) + 30.0f) / (60.0f / 255.0f);
+	params.controller[2] = ((flYaw / 4.0f) + 30.0f) / (60.0f / 255.0f);
+	params.controller[3] = ((flYaw / 4.0f) + 30.0f) / (60.0f / 255.0f);
+	params.prevcontroller[0] = params.controller[0];
+	params.prevcontroller[1] = params.controller[1];
+	params.prevcontroller[2] = params.controller[2];
+	params.prevcontroller[3] = params.controller[3];
 
-	player_params[index].angles[1] = player_params[index].gaityaw;
-	if (player_params[index].angles[1] < -0) player_params[index].angles[1] += 360.0f;
-	player_params[index].prevangles[1] = player_params[index].angles[1];
+	params.final_angles[1] = params.gaityaw;
+	if (params.final_angles[1] < -0) params.final_angles[1] += 360.0f;
+	params.prevangles[1] = params.final_angles[1];
 
-	if (player_params[index].gaitsequence >= g_pstudiohdr->numseq)
-		player_params[index].gaitsequence = 0;
+	if (params.gaitsequence >= g_pstudiohdr->numseq)
+		params.gaitsequence = 0;
 
-	pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + player_params[index].gaitsequence;
+	pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + params.gaitsequence;
 
 	// calc gait frame
 	if (pseqdesc->linearmovement[0] > 0)
-		player_params[index].gaitframe += (player_params[index].m_flGaitMovement / pseqdesc->linearmovement[0]) * pseqdesc->numframes;
-	else player_params[index].gaitframe += pseqdesc->fps * dt;
+		params.gaitframe += (params.m_flGaitMovement / pseqdesc->linearmovement[0]) * pseqdesc->numframes;
+	else params.gaitframe += pseqdesc->fps * dt;
 
 	// do modulo
-	player_params[index].gaitframe = player_params[index].gaitframe - (int)(player_params[index].gaitframe / pseqdesc->numframes) * pseqdesc->numframes;
-	if (player_params[index].gaitframe < 0) player_params[index].gaitframe += pseqdesc->numframes;
+	params.gaitframe = params.gaitframe - (int)(params.gaitframe / pseqdesc->numframes) * pseqdesc->numframes;
+	if (params.gaitframe < 0) params.gaitframe += pseqdesc->numframes;
 }
 
 
-void StudioProcessGait(int index)
+void StudioProcessGait(player_anim_params_s& params)
 {
 	mstudioseqdesc_t* pseqdesc;
-	float dt = player_params[index].m_clTime - player_params[index].m_clOldTime;
+	float dt = params.m_clTime - params.m_clOldTime;
 
 	if (dt < 0.0)
 		dt = 0;
@@ -599,9 +597,9 @@ void StudioProcessGait(int index)
 	else if (dt > 1.0)
 		dt = 1;
 
-	CalculateYawBlend(index);
-	CalculatePitchBlend(index);
-	auto ent = INDEXENT(index + 1);
+	CalculateYawBlend(params);
+	CalculatePitchBlend(params);
+	auto ent = INDEXENT(params.playerId);
 	if (!ent)
 	{
 		return;
@@ -611,177 +609,302 @@ void StudioProcessGait(int index)
 	if (!pstudiohdr)
 		return;
 
-	pseqdesc = (mstudioseqdesc_t*)((byte*)pstudiohdr + pstudiohdr->seqindex) + player_params[index].gaitsequence;
+	pseqdesc = (mstudioseqdesc_t*)((byte*)pstudiohdr + pstudiohdr->seqindex) + params.gaitsequence;
 
 	// calc gait frame
 	if (pseqdesc->linearmovement.x > 0.0f)
-		player_params[index].gaitframe += (player_params[index].m_flGaitMovement / pseqdesc->linearmovement.x) * pseqdesc->numframes;
+		params.gaitframe += (params.m_flGaitMovement / pseqdesc->linearmovement.x) * pseqdesc->numframes;
 	else
-		player_params[index].gaitframe += player_params[index].framerate * pseqdesc->fps * dt;
+		params.gaitframe += params.framerate * pseqdesc->fps * dt;
 
 	// do modulo
-	player_params[index].gaitframe -= int(player_params[index].gaitframe / pseqdesc->numframes) * pseqdesc->numframes;
+	params.gaitframe -= int(params.gaitframe / pseqdesc->numframes) * pseqdesc->numframes;
 
-	if (player_params[index].gaitframe < 0)
-		player_params[index].gaitframe += pseqdesc->numframes;
+	if (params.gaitframe < 0)
+		params.gaitframe += pseqdesc->numframes;
 }
 
-void ProcessAnimParams(int id, float frametime, player_anim_params_s& params, player_anim_params_s* prev_params, entity_state_s* state, edict_t* ent)
+qboolean CL_FindInterpolationUpdates(int host, int target, int sequence, float targettime, player_anim_params_s** ph0, player_anim_params_s** ph1)
+{
+	qboolean	extrapolate = true;
+	int	i, i0, i1, imod;
+	float	at;
+
+	i0 = (sequence) & SV_UPDATE_MASK;
+	i1 = (sequence - 1) & SV_UPDATE_MASK;
+	imod = i0;
+
+	for (i = 1; i < SV_UPDATE_BACKUP - 1; i++)
+	{
+		at = player_params_history[host].hist[(imod - i) & SV_UPDATE_MASK][target].animtime;
+
+		if (at == 0.0)
+			break;
+
+		if (at < targettime)
+		{
+			i0 = ((imod - i) + 1) & SV_UPDATE_MASK;
+			i1 = (imod - i) & SV_UPDATE_MASK;
+			extrapolate = false;
+			break;
+		}
+	}
+
+	if (ph0 != NULL) *ph0 = &player_params_history[host].hist[i0][target];
+	if (ph1 != NULL) *ph1 = &player_params_history[host].hist[i1][target];
+	
+	return extrapolate;
+}
+
+void NormalizeAngles(vec3_t& angles)
 {
 	int i;
-	if (state && prev_params)
+	// Normalize angles
+	for (i = 0; i < 3; i++)
 	{
-		player_params[id] = *prev_params;
-		player_params[id].sequence = state->sequence;
-		player_params[id].gaitsequence = state->gaitsequence;
-		player_params[id].frame = state->frame;
-		player_params[id].angles = state->angles;
-		player_params[id].origin = state->origin;
-		player_params[id].animtime = state->animtime;
-		player_params[id].framerate = state->framerate;
-		player_params[id].controller[0] = state->controller[0];
-		player_params[id].controller[1] = state->controller[1];
-		player_params[id].controller[2] = state->controller[2];
-		player_params[id].controller[3] = state->controller[3];
-		player_params[id].blending[0] = state->blending[0];
-		player_params[id].blending[1] = state->blending[1];
-		player_params[id].m_clTime = state->animtime + frametime;
-
-		player_params[id].m_clOldTime = prev_params->m_clTime;
-
-		player_params[id].m_prevgaitorigin = prev_params->origin;
-
-		player_params[id].prevangles = prev_params->angles;
-		player_params[id].prevframe = prev_params->frame;
-		player_params[id].prevsequence = prev_params->sequence;
-
-		if (player_params[id].sequence < 0)
-			player_params[id].sequence = 0;
-
-		// sequence has changed, hold the previous sequence info
-		if (player_params[id].sequence != player_params[id].prevsequence)
+		if (angles[i] > 180.0)
 		{
-			player_params[id].sequencetime = player_params[id].animtime + 0.01f;
+			angles[i] -= 360.0;
+		}
+		else if (angles[i] < -180.0)
+		{
+			angles[i] += 360.0;
+		}
+	}
+}
 
-			// save current blends to right lerping from last sequence
-			for (int i = 0; i < 2; i++)
-				player_params[id].prevseqblending[i] = prev_params->blending[i];
-			player_params[id].prevsequence = prev_params->sequence; // save old sequence	
+inline void InterpolateAngles(vec3_t start, vec3_t end, vec3_t& output, float frac)
+{
+	int i;
+	float ang1, ang2;
+	float d;
+
+	NormalizeAngles(start);
+	NormalizeAngles(end);
+
+	for (i = 0; i < 3; i++)
+	{
+		ang1 = start[i];
+		ang2 = end[i];
+
+		d = ang2 - ang1;
+		if (d > 180)
+		{
+			d -= 360;
+		}
+		else if (d < -180)
+		{
+			d += 360;
 		}
 
+		output[i] = ang1 + d * frac;
+	}
 
-		// copy controllers
-		for (i = 0; i < 4; i++)
-		{
-			if (player_params[id].controller[i] != prev_params->controller[i])
-				player_params[id].prevcontroller[i] = prev_params->controller[i];
-		}
+	NormalizeAngles(output);
+}
+float CL_PureOrigin(int host, int target, float t, vec3_t& outorigin, vec3_t& outangles)
+{
+	player_anim_params_s* ph0, * ph1;
+	float				t1, t0;
+	float				frac = 0.f;
+	vec3_t				delta;
+	vec3_t				pos, angles;
 
-		// copy blends
-		for (i = 0; i < 2; i++)
-			player_params[id].prevblending[i] = prev_params->blending[i];
+	auto _host_client = api->GetClient(host);
+	CL_FindInterpolationUpdates(host, target, (_host_client->netchan.outgoing_sequence + 1), t, & ph0, & ph1);
+
+	if (!ph0 || !ph1)
+		return 0.0f;
+
+	t0 = ph0->animtime;
+	t1 = ph1->animtime;
+
+
+	if (t0 != 0)
+	{
+		VectorSubtract(ph0->origin, ph1->origin, delta);
+
+#define bound( min, num, max )	((num) >= (min) ? ((num) < (max) ? (num) : (max)) : (min))
+		if (t0 != t1)
+			frac = bound(0, (t - t1) / (t0 - t1), 1.2);
+		else
+			frac = 1.0f;
+		//frac = (t - t1) / (t0 - t1);
+		VectorMA(ph1->origin, frac, delta, pos);
+		InterpolateAngles(ph0->angles, ph1->angles, angles, frac);
+
+		VectorCopy(pos, outorigin);
+		VectorCopy(angles, outangles);
 	}
 	else
 	{
+		VectorCopy(ph1->origin, outorigin);
+		VectorCopy(ph1->angles, outangles);
+	}
+	return frac;
+}
 
-		player_params[id].sequence = ent->v.sequence;
-		player_params[id].gaitsequence = ent->v.gaitsequence;
-		player_params[id].prevangles = player_params[id].angles;
-		player_params[id].prevframe = player_params[id].frame;
-		player_params[id].frame = ent->v.frame;
-		player_params[id].angles = ent->v.angles;
-		player_params[id].origin = ent->v.origin;
-		player_params[id].animtime = ent->v.animtime;
-		player_params[id].m_clOldTime = player_params[id].m_clTime;
-		player_params[id].m_clTime = ent->v.animtime;
-		player_params[id].framerate = ent->v.framerate;
-		player_params[id].controller[0] = ent->v.controller[0];
-		player_params[id].controller[1] = ent->v.controller[1];
-		player_params[id].controller[2] = ent->v.controller[2];
-		player_params[id].controller[3] = ent->v.controller[3];
-		player_params[id].blending[0] = ent->v.blending[0];
-		player_params[id].blending[1] = ent->v.blending[1];
-		if (player_params[id].sequence < 0)
-			player_params[id].sequence = 0;
+
+float BitAngle(float fAngle, int numbits)
+{
+	if (numbits >= 32) {
+		return fAngle;
+	}
+
+	unsigned int shift = (1 << numbits);
+	unsigned int mask = shift - 1;
+
+	int d = (int)(shift * fmod((double)fAngle, 360.0)) / 360;
+	d &= mask;
+
+	float angle =  (float)(d * (360.0 / (1 << numbits)));
+
+
+	if (angle > 180.0)
+	{
+		angle -= 360.0;
+	}
+	else if (angle < -180.0)
+	{
+		angle += 360.0;
+	}
+
+	return angle;
+}
+
+float BitTime8(float f2)
+{
+	int32 twVal = (int)(f2 * 100.0);
+	return (float)(twVal / 100.0);
+}
+
+void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player_anim_params_s& prev_params, entity_state_s* state, edict_t* ent)
+{
+	auto _host_client = api->GetClient(host_id);
+	int i;
+	if (state)
+	{
+		params = prev_params;
+		params.playerId = state->number;
+		params.sequence = state->sequence;
+		params.gaitsequence = state->gaitsequence;
+		params.frame = uint32_t(state->frame);
+		params.angles.x = BitAngle(state->angles.x, 16);
+		params.angles.y = BitAngle(state->angles.y, 16);
+		params.angles.z = BitAngle(state->angles.z, 16);
+
+		params.origin.x = int(state->origin.x * 32) / 32.f;
+		params.origin.y = int(state->origin.y * 32) / 32.f;
+		params.origin.z = int(state->origin.z * 32) / 32.f;
+
+
+		params.animtime = BitTime8(state->animtime);
+		params.framerate = state->framerate;
+		params.controller[0] = state->controller[0];
+		params.controller[1] = state->controller[1];
+		params.controller[2] = state->controller[2];
+		params.controller[3] = state->controller[3];
+		params.blending[0] = state->blending[0];
+		params.blending[1] = state->blending[1];
+		params.m_clTime = gpGlobals->time;
+
+		params.m_clOldTime = prev_params.m_clTime;
+
+		float t = gpGlobals->time;
+		t -= (_host_client->lastcmd.lerp_msec) * 0.001f;		
+		CL_PureOrigin(host_id, id, t , params.final_origin, params.final_angles);
+		
+		params.m_prevgaitorigin = prev_params.final_origin;
+
+		params.prevangles = prev_params.final_angles;
+		params.prevframe = prev_params.f;
+		params.prevsequence = prev_params.sequence;
+
+		if (params.sequence < 0)
+			params.sequence = 0;
 
 		// sequence has changed, hold the previous sequence info
-		if (player_params[id].sequence != player_params[id].prevsequence)
+		if (params.sequence != params.prevsequence)
 		{
-			player_params[id].sequencetime = player_params[id].animtime + 0.01f;
+			params.sequencetime = params.animtime + 0.01f;
 
 			// save current blends to right lerping from last sequence
 			for (int i = 0; i < 2; i++)
-				player_params[id].prevseqblending[i] = player_params[id].blending[i];
-			player_params[id].prevsequence = player_params[id].sequence; // save old sequence	
+				params.prevseqblending[i] = prev_params.blending[i];
+			params.prevsequence = prev_params.sequence; // save old sequence	
 		}
 
 
 		// copy controllers
 		for (i = 0; i < 4; i++)
 		{
-			if (player_params[id].controller[i] != player_params[id].controller[i])
-				player_params[id].prevcontroller[i] = player_params[id].controller[i];
+			if (params.controller[i] != prev_params.controller[i])
+				params.prevcontroller[i] = prev_params.controller[i];
 		}
 
 		// copy blends
 		for (i = 0; i < 2; i++)
-			player_params[id].prevblending[i] = player_params[id].blending[i];
+			params.prevblending[i] = prev_params.blending[i];
+
 
 	}
 
 	if (g_eGameType == GT_CStrike || g_eGameType == GT_CZero)
 	{
-		if (player_params[id].gaitsequence)
+		if (params.gaitsequence)
 		{
-			StudioProcessGait(id);
-
+			StudioProcessGait(params);
+			CS_StudioProcessParams(id, params);
 		}
 		else
 		{
-			player_params[id].controller[0] = 127;
-			player_params[id].controller[1] = 127;
-			player_params[id].controller[2] = 127;
-			player_params[id].controller[3] = 127;
-			player_params[id].prevcontroller[0] = player_params[id].controller[0];
-			player_params[id].prevcontroller[1] = player_params[id].controller[1];
-			player_params[id].prevcontroller[2] = player_params[id].controller[2];
-			player_params[id].prevcontroller[3] = player_params[id].controller[3];
+			params.controller[0] = 127;
+			params.controller[1] = 127;
+			params.controller[2] = 127;
+			params.controller[3] = 127;
+			params.prevcontroller[0] = params.controller[0];
+			params.prevcontroller[1] = params.controller[1];
+			params.prevcontroller[2] = params.controller[2];
+			params.prevcontroller[3] = params.controller[3];
 
-			CalculatePitchBlend(id);
-			CalculateYawBlend(id);
+			CalculatePitchBlend(params);
+			CalculateYawBlend(params);
 		}
 	}
 	else
 	{
-		if (player_params[id].gaitsequence)
+		if (params.gaitsequence)
 		{
-			HL_StudioProcessGait(id);
-			//player_params[id].angles[0] = -player_params[id].angles[0]; // stupid quake bug
-			//player_params[id].angles[0] = 0.0f;
+			HL_StudioProcessGait(params);
+			//params.angles[0] = -params.angles[0]; // stupid quake bug
+			//params.angles[0] = 0.0f;
 		}
 		else
 		{
-			player_params[id].controller[0] = 127;
-			player_params[id].controller[1] = 127;
-			player_params[id].controller[2] = 127;
-			player_params[id].controller[3] = 127;
-			player_params[id].prevcontroller[0] = player_params[id].controller[0];
-			player_params[id].prevcontroller[1] = player_params[id].controller[1];
-			player_params[id].prevcontroller[2] = player_params[id].controller[2];
-			player_params[id].prevcontroller[3] = player_params[id].controller[3];
+			params.controller[0] = 127;
+			params.controller[1] = 127;
+			params.controller[2] = 127;
+			params.controller[3] = 127;
+			params.prevcontroller[0] = params.controller[0];
+			params.prevcontroller[1] = params.controller[1];
+			params.prevcontroller[2] = params.controller[2];
+			params.prevcontroller[3] = params.controller[3];
 		}
 	}
+	
 }
 
 void PlayerPostThinkPost(edict_t* pEntity)
 {
 	int i;
 	auto id = ENTINDEX(pEntity) - 1;
-	auto _host_client = g_RehldsSvs->GetClient_t(id);
+	auto _host_client = api->GetClient(id);
 
-	ProcessAnimParams(id, _host_client->lastcmd.msec * 0.001f, player_params[id], nullptr, nullptr, pEntity);
 	sv_adjusted_positions_t* pos;
 	client_t* cli;
+
+	if (_host_client->fakeclient)
+		RETURN_META(MRES_IGNORED);
 
 	if (nofind)
 	{
@@ -792,15 +915,15 @@ void PlayerPostThinkPost(edict_t* pEntity)
 	if (!MDLL_AllowLagCompensation())
 		RETURN_META(MRES_IGNORED);
 
-	if (g_RehldsSvs->GetMaxClients() <= 1 || sv_unlag->value == 0.0)
+	if (api->GetMaxClients() <= 1 || sv_unlag->value == 0.0)
 		RETURN_META(MRES_IGNORED);
 
 	if (!_host_client->lw || !_host_client->lc || !_host_client->active)
 		RETURN_META(MRES_IGNORED);
 
-	for (int i = 0; i < g_RehldsSvs->GetMaxClients(); i++)
+	for (int i = 0; i < api->GetMaxClients(); i++)
 	{
-		cli = g_RehldsSvs->GetClient_t(i);
+		cli = api->GetClient(i);
 		pos = &truepositions[i];
 
 		if (cli == _host_client || !cli->active)
@@ -824,20 +947,16 @@ int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict
 {
 	int i;
 	auto host_id = ENTINDEX(host) - 1;
-	auto _host_client = g_RehldsSvs->GetClient_t(host_id);
+	auto _host_client = api->GetClient(host_id);
 	if (!player || ent == host)
 	{
 		RETURN_META_VALUE(MRES_IGNORED, 0);
 	}
 	auto id = ENTINDEX(ent) - 1;
-	auto save = player_params[id];
-	player_params[id] = player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence + 1)][id];
-	ProcessAnimParams(id, _host_client->lastcmd.msec * 0.001f, player_params[id],
-		&player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id],
+	ProcessAnimParams(id, host_id, 
+		player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id],
+		player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence - 1)][id],
 		state, host);
-
-	player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence + 1)][id] = player_params[id];
-	player_params[id] = save;
 
 	RETURN_META_VALUE(MRES_IGNORED, 0);
 }
@@ -846,11 +965,11 @@ void (UpdateClientDataPost)(const struct edict_s* ent, int sendweapons, struct c
 {
 
 	auto host_id = ENTINDEX(ent) - 1;
-	auto _host_client = g_RehldsSvs->GetClient_t(host_id);
-	for (int i = 0; i < g_RehldsSvs->GetMaxClients(); i++)
+	auto _host_client = api->GetClient(host_id);
+	for (int i = 0; i < api->GetMaxClients(); i++)
 	{
 
-		player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence + 1)][i] = player_params_history[host_id].hist[SV_UPDATE_MASK & _host_client->netchan.outgoing_sequence][i];
+		//player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence + 1)][i] = player_params_history[host_id].hist[SV_UPDATE_MASK & _host_client->netchan.outgoing_sequence][i];
 	}
 	RETURN_META(MRES_IGNORED);
 }
@@ -968,19 +1087,29 @@ FARPROC WINAPI GetProcAddressHooked(
 #endif
 bool OnMetaAttach()
 {
+
 	if (Init)
 	{
 		return Init;
 	}
-	if (!RehldsApi_Init())
-	{
-		return false;
+	api = std::make_unique<rehlds_api>();
+	if (!api->Init())
+	{		
+		api = std::make_unique<hlds_api>();
+		if (!api->Init())
+		{
+			UTIL_ServerPrint("Hitbox fixer is not compatible with your HLDS/ReHLDS version. Create issue on github [https://github.com/Garey27/hitbox_fixer].");
+			return false;
+		}
 	}
+
 	sv_unlag = g_engfuncs.pfnCVarGetPointer("sv_unlag");
 	sv_maxunlag = g_engfuncs.pfnCVarGetPointer("sv_maxunlag");
 	sv_unlagpush = g_engfuncs.pfnCVarGetPointer("sv_unlagpush");
+
 	CVAR_REGISTER(&hf_hitbox_fix);
 	phf_hitbox_fix = CVAR_GET_POINTER(hf_hitbox_fix.name);
+
 	HF_Init_Config();
 	HF_Exec_Config();
 
@@ -1098,4 +1227,5 @@ void OnMetaDetach()
 {
 	subhook_remove(Server_GetBlendingInterfaceHook);
 	(*orig_ppinterface)->SV_StudioSetupBones = orig_interface.SV_StudioSetupBones;
+	
 }

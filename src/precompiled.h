@@ -36,9 +36,11 @@
 #include <rehlds_api.h>
 #include "engine_rehlds_api.h"
 #include "main.h"
-
+#include "handles.h"
+#include "patternscan.h"
 
 #include "struct.h"
+#include "api.h"
 #undef DLLEXPORT
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)

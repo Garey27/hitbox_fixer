@@ -99,18 +99,22 @@ struct client_t
 
 struct player_anim_params_s
 {
+	int playerId;
 	int sequence;
 	int gaitsequence;
 	int m_nPlayerGaitSequences;
 	
+	double f;
 	float frame;
 	float prevframe;
 	float gaitframe;
 	float gaityaw;
 	Vector origin;
+	Vector angles;
+	Vector final_origin;
+	Vector final_angles;
 	Vector m_prevgaitorigin;
 	Vector prevangles;
-	Vector angles;
 	int prevsequence;
 	float sequencetime;
 	float animtime;
@@ -141,5 +145,86 @@ typedef struct sv_adjusted_positions_s
 } sv_adjusted_positions_t;
 
 
+constexpr int MAX_CONSISTENCY_LIST = 512;
+
+typedef struct consistency_s
+{
+	char* filename;
+	int issound;
+	int orig_index;
+	int value;
+	int check_type;
+	float mins[3];
+	float maxs[3];
+} consistency_t;
+
+typedef struct event_s
+{
+	unsigned short index;
+	const char* filename;
+	int filesize;
+	const char* pszScript;
+} event_t;
+
+
+constexpr int NUM_BASELINES = 64;
+
+typedef struct extra_baselines_s
+{
+	int number;
+	int classname[NUM_BASELINES];
+	entity_state_t baseline[NUM_BASELINES];
+} extra_baselines_t;
+
+constexpr int MAX_DATAGRAM = 4000;
+
+typedef struct server_s
+{
+	qboolean active;
+	qboolean paused;
+	qboolean loadgame;
+	double time;
+	double oldtime;
+	int lastcheck;
+	double lastchecktime;
+	char name[64];
+	char oldname[64];
+	char startspot[64];
+	char modelname[64];
+	struct model_s* worldmodel;
+	CRC32_t worldmapCRC;
+	unsigned char clientdllmd5[16];
+	resource_t resourcelist[MAX_RESOURCE_LIST];
+	int num_resources;
+	consistency_t consistency_list[MAX_CONSISTENCY_LIST];
+	int num_consistency;
+	const char* model_precache[MAX_MODELS];
+	struct model_s* models[MAX_MODELS];
+	unsigned char model_precache_flags[MAX_MODELS];
+	struct event_s event_precache[MAX_EVENTS];
+	const char* sound_precache[MAX_SOUNDS];
+	short int sound_precache_hashedlookup[MAX_SOUNDS_HASHLOOKUP_SIZE];
+	qboolean sound_precache_hashedlookup_built;
+	const char* generic_precache[MAX_GENERIC];
+	char generic_precache_names[MAX_GENERIC][64];
+	int num_generic_names;
+	const char* lightstyles[MAX_LIGHTSTYLES];
+	int num_edicts;
+	int max_edicts;
+	edict_t* edicts;
+	struct entity_state_s* baselines;
+	extra_baselines_t* instance_baselines;
+	server_state_t state;
+	sizebuf_t datagram;
+	unsigned char datagram_buf[MAX_DATAGRAM];
+	sizebuf_t reliable_datagram;
+	unsigned char reliable_datagram_buf[MAX_DATAGRAM];
+	sizebuf_t multicast;
+	unsigned char multicast_buf[1024];
+	sizebuf_t spectator;
+	unsigned char spectator_buf[1024];
+	sizebuf_t signon;
+	unsigned char signon_data[32768];
+} server_t;
 #endif // _STRUCT_H_
 
