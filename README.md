@@ -1,6 +1,8 @@
 # Hitbox Fixer ![C/C++ CI](https://github.com/Garey27/hitbox_fixer/workflows/CMake/badge.svg)
 This module fixes incorrect player server-side hitboxes in Counter-Strike 1.6, Half-Life and AG. (Create issue if want support for your mod).
 ## Requirements
+* [HLDS] version 8648
+or
 * [REHLDS](https://github.com/dreamstalker/rehlds/releases) version 3.3 or above 
 ## Fixes
 - [x] Fixes absolutely broken hitboxes when numblends == 1 (ducking/standing in reload weapon or plant c4 animation).
@@ -9,5 +11,4 @@ This module fixes incorrect player server-side hitboxes in Counter-Strike 1.6, H
 ## Downloads
 * [Release builds](https://github.com/Garey27/hitbox_fixer/releases)
 ## TODO
-- [ ] Add HLDS compatibility (need to hook client_t* struct)
 - [ ] Fully implement non-players setupbones code.
