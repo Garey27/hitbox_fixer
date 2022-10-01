@@ -16,7 +16,7 @@ typedef float real_t;
 extern player_anim_params_s player_params[MAX_CLIENTS];
 int player = -1;
 edict_t* m_pCurrentEntity;
-
+extern qboolean nofind;
 
 int VectorCompare(const vec_t* v1, const vec_t* v2)
 {
@@ -1124,7 +1124,7 @@ void EXT_FUNC CS_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 	static float pos4[MAXSTUDIOBONES][3];
 	static vec4_t q4[MAXSTUDIOBONES];
 
-	if (!phf_hitbox_fix->value)
+	if (!phf_hitbox_fix->value || nofind)
 	{
 		orig_interface.SV_StudioSetupBones(pModel, frame, sequence, angles, origin, pcontroller, pblending, iBone, pEdict);
 		return;

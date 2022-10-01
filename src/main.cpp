@@ -23,7 +23,7 @@ sv_blending_interface_s orig_interface;
 // Resource counts
 #define MAX_MODEL_INDEX_BITS		9	// sent as a short
 #define MAX_MODELS			(1<<MAX_MODEL_INDEX_BITS)
-qboolean nofind;
+qboolean nofind = false;
 typedef int(*SV_BLENDING_INTERFACE_FUNC)(int, struct sv_blending_interface_s**, struct server_studio_api_s*, float*, float*);
 
 // How many data slots to use when in multiplayer (must be power of 2)
@@ -31,7 +31,6 @@ typedef int(*SV_BLENDING_INTERFACE_FUNC)(int, struct sv_blending_interface_s**, 
 constexpr int SV_UPDATE_BACKUP = MULTIPLAYER_BACKUP;
 constexpr int SV_UPDATE_MASK = (SV_UPDATE_BACKUP - 1);
 
-sv_adjusted_positions_t truepositions[MAX_CLIENTS];
 struct player_anim_params_hist_s
 {
 	player_anim_params_s hist[MULTIPLAYER_BACKUP][MAX_CLIENTS];
@@ -134,39 +133,19 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 	vec3_t mins;
 	vec3_t maxs;
 
-	memset(truepositions, 0, sizeof(truepositions));
 	nofind = 1;
 	if (_host_client->fakeclient)
 		RETURN_META(MRES_IGNORED);
 
-	if (!MDLL_AllowLagCompensation())
+	if (!MDLL_AllowLagCompensation() || sv_unlag->value == 0.0f || !_host_client->lw || !_host_client->lc)
+	{
 		RETURN_META(MRES_IGNORED);
-
-	if (sv_unlag->value == 0.0f || !_host_client->lw || !_host_client->lc)
-		RETURN_META(MRES_IGNORED);
+	}
 
 	if (api->GetMaxClients() <= 1 || !_host_client->active)
 		RETURN_META(MRES_IGNORED);
 
-
 	nofind = 0;
-	for (int i = 0; i < api->GetMaxClients(); i++)
-	{
-		cl = api->GetClient(i);
-		if (cl == _host_client || !cl->active)
-			continue;
-
-		truepositions[i].active = 1;
-		truepositions[i].extra = player_params[i];
-	}
-	
-
-	if (SV_UPDATE_BACKUP <= 0)
-	{
-		memset(truepositions, 0, sizeof(truepositions));
-		nofind = 1;
-		RETURN_META(MRES_IGNORED);
-	}
 
 	size_t frame_index = SV_UPDATE_MASK & (_host_client->netchan.incoming_acknowledged);
 	frame = &_host_client->frames[frame_index];
@@ -186,20 +165,9 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 		if (cl == _host_client || !cl->active)
 			continue;
 
-		pos = &truepositions[state->number - 1];
-		if (pos->deadflag)
-			continue;
-
-		if (!pos->active)
-		{
-			continue;
-		}
-
-		static bool Init = false;
-		player_params[state->number - 1] = player_params_history[host_id].hist[frame_index][state->number - 1];
-		
-		pos->needrelink = 1;
+		player_params[state->number - 1] = player_params_history[host_id].hist[frame_index][state->number - 1];		
 #ifdef DEBUG
+		static bool Init = false;
 		if (!Init)
 		{
 			Init = true;
@@ -896,49 +864,7 @@ void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player
 
 void PlayerPostThinkPost(edict_t* pEntity)
 {
-	int i;
-	auto id = ENTINDEX(pEntity) - 1;
-	auto _host_client = api->GetClient(id);
-
-	sv_adjusted_positions_t* pos;
-	client_t* cli;
-
-	if (_host_client->fakeclient)
-		RETURN_META(MRES_IGNORED);
-
-	if (nofind)
-	{
-		nofind = 0;
-		RETURN_META(MRES_IGNORED);
-	}
-
-	if (!MDLL_AllowLagCompensation())
-		RETURN_META(MRES_IGNORED);
-
-	if (api->GetMaxClients() <= 1 || sv_unlag->value == 0.0)
-		RETURN_META(MRES_IGNORED);
-
-	if (!_host_client->lw || !_host_client->lc || !_host_client->active)
-		RETURN_META(MRES_IGNORED);
-
-	for (int i = 0; i < api->GetMaxClients(); i++)
-	{
-		cli = api->GetClient(i);
-		pos = &truepositions[i];
-
-		if (cli == _host_client || !cli->active)
-			continue;
-
-		if (!pos->needrelink)
-			continue;
-
-		if (!pos->active)
-		{
-			continue;
-		}
-
-		player_params[i] = truepositions[i].extra;
-	}
+	nofind = 0;	
 	RETURN_META(MRES_IGNORED);
 }
 
