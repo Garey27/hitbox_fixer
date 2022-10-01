@@ -55,7 +55,7 @@ struct hlds_api : players_api
 		svs = decltype(svs)(PatternScan::FindPattern("83 3D *? ? ? ? ? 0F 9F C0 89 04 24 E8 ? ? ? ? A1 ? ? ? ?", "engine_i486.so"));
 		sv = decltype(sv)(PatternScan::FindPattern("A1 *? ? ? ? 85 C0 75 ? 83 C4 ? 5B 5E", "engine_i486.so"));
 #endif
-		return svs != nullptr;
+		return svs != nullptr && sv != nullptr;
 	};
 	client_t* GetClient(size_t index) override
 	{

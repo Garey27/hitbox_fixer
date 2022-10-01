@@ -3,7 +3,7 @@ This module fixes incorrect player server-side hitboxes in Counter-Strike 1.6, H
 ## Requirements
 One of:
 * HLDS version 8648 
-* [REHLDS](https://github.com/dreamstalker/rehlds/releases) version 3.3 or above 
+* [REHLDS](https://github.com/dreamstalker/rehlds/releases) version 3.10 or above 
 ## Fixes
 - [x] Fixes absolutely broken hitboxes when numblends == 1 (ducking/standing in reload weapon or plant c4 animation).
 - [x] Hitbox backtrack based on client-side position.

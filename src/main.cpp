@@ -85,13 +85,6 @@ void VectorMA(const vec_t* veca, float scale, const vec_t* vecm, vec_t* out)
 void TestFunc(uint32_t host_id, float t, float frac, uintptr_t sequence)
 {
 	auto _host_client = api->GetClient(host_id);
-	if (TestingHitboxes)
-	{
-
-		char msg[1024];
-		snprintf(msg, 1024, "%.2f %.2f | %.2f %.2f\n", t, frac, player_params_history[host_id].hist[SV_UPDATE_MASK & sequence][1].t, player_params_history[host_id].hist[SV_UPDATE_MASK & sequence][1].frac);
-		g_engfuncs.pfnServerPrint(msg);
-	}
 	for (int i = 0; i < api->GetMaxClients(); i++)
 	{
 		auto cl = api->GetClient(i);
@@ -1021,10 +1014,15 @@ bool OnMetaAttach()
 	api = std::make_unique<rehlds_api>();
 	if (!api->Init())
 	{		
+		if (g_RehldsApi)
+		{
+			UTIL_ServerPrint("Hitbox fixer is not compatible with your ReHLDS version. Hitbox Fixer needs at least 3.10 version.");
+			return false;
+		}
 		api = std::make_unique<hlds_api>();
 		if (!api->Init())
 		{
-			UTIL_ServerPrint("Hitbox fixer is not compatible with your HLDS/ReHLDS version. Create issue on github [https://github.com/Garey27/hitbox_fixer].");
+			UTIL_ServerPrint("Hitbox fixer is not compatible with your HLDS version. Create issue on github [https://github.com/Garey27/hitbox_fixer].");
 			return false;
 		}
 	}

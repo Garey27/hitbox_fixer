@@ -1054,7 +1054,7 @@ void EXT_FUNC HL_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 void CS_StudioProcessParams(int player, player_anim_params_s& params)
 {
 	auto cl = api->GetClient(player);
-	if (!cl)
+	if (!cl || !cl->edict)
 		return;
 	auto pModel = api->GetModel(cl->edict->v.modelindex);
 	if (!pModel)
@@ -1066,10 +1066,12 @@ void CS_StudioProcessParams(int player, player_anim_params_s& params)
 		return;
 	}
 	// Bound sequence number
-	if (params.sequence < 0 || params.sequence >= g_pstudiohdr->numseq)
+	if (params.sequence < 0)
 		params.sequence = 0;
 
-	auto pbones = (mstudiobone_t*)((byte*)g_pstudiohdr + g_pstudiohdr->boneindex);
+	if (params.sequence >= g_pstudiohdr->numseq)
+		return;
+
 	auto pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + params.sequence;
 
 	if (player != -1)
@@ -1084,21 +1086,19 @@ void CS_StudioProcessParams(int player, player_anim_params_s& params)
 
 	params.f = StudioEstimateFrame(pseqdesc);
 
-	if (player != -1)
+	if (params.gaitsequence == ANIM_WALK_SEQUENCE)
 	{
-		if (params.gaitsequence == ANIM_WALK_SEQUENCE)
+		if (params.blending[0] > 26)
 		{
-			if (params.blending[0] > 26)
-			{
-				params.blending[0] -= 26;
-			}
-			else
-			{
-				params.blending[0] = 0;
-			}
-			params.prevseqblending[0] = params.blending[0];
+			params.blending[0] -= 26;
 		}
+		else
+		{
+			params.blending[0] = 0;
+		}
+		params.prevseqblending[0] = params.blending[0];
 	}
+	
 }
 void EXT_FUNC CS_StudioSetupBones(model_t* pModel, float frame, int sequence, const vec_t* angles, const vec_t* origin, const byte* pcontroller, const byte* pblending, int iBone, const edict_t* pEdict)
 {
