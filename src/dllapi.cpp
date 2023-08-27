@@ -81,7 +81,7 @@ DLL_FUNCTIONS gFunctionTable_Post =
 	NULL,					// pfnServerDeactivate
 	NULL,					// pfnPlayerPreThink
 	PlayerPostThinkPost,	// pfnPlayerPostThink
-	NULL,					// pfnStartFrame
+	StartFramePost,					// pfnStartFrame
 	NULL,					// pfnParmsNewLevel
 	NULL,					// pfnParmsChangeLevel
 	NULL,					// pfnGetGameDescription
@@ -94,7 +94,7 @@ DLL_FUNCTIONS gFunctionTable_Post =
 	NULL,					// pfnPM_Init
 	NULL,					// pfnPM_FindTextureType
 	NULL,					// pfnSetupVisibility
-	UpdateClientDataPost,	// pfnUpdateClientData
+	NULL,	// pfnUpdateClientData
 	AddToFullPackPost,					// pfnAddToFullPack
 	NULL,					// pfnCreateBaseline
 	NULL,					// pfnRegisterEncoders

@@ -18,6 +18,7 @@ extern studiohdr_t* g_pstudiohdr;
 extern float(*g_pRotationMatrix)[3][4];
 extern float(*g_pBoneTransform)[128][3][4];
 extern void CS_StudioProcessParams(int player, player_anim_params_s& params);
+void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player_anim_params_s& prev_params, entity_state_s* state);
 sv_blending_interface_s** orig_ppinterface;
 sv_blending_interface_s orig_interface;
 // Resource counts
@@ -35,7 +36,8 @@ struct player_anim_params_hist_s
 {
 	player_anim_params_s hist[MULTIPLAYER_BACKUP][MAX_CLIENTS];
 };
-player_anim_params_hist_s player_params_history[MAX_CLIENTS]{};
+uint32_t ServerFrameId;
+player_anim_params_hist_s player_params_history[MAX_CLIENTS+1]{};
 player_anim_params_s player_params[MAX_CLIENTS]{};
 
 subhook_t Server_GetBlendingInterfaceHook{};
@@ -58,7 +60,7 @@ void (PutInServer)(edict_t* pEntity)
 	{
 		RETURN_META(MRES_IGNORED);
 	}
-	auto host_id = ENTINDEX(pEntity) - 1;
+	auto host_id = ENTINDEX(pEntity);
 	memset(&player_params_history[host_id], 0, sizeof(player_params_history[host_id]));
 	RETURN_META(MRES_IGNORED);
 }
@@ -108,10 +110,46 @@ void TestFunc(uint32_t host_id, float t, float frac, uintptr_t sequence)
 	}
 }
 #endif
+void (StartFramePost)()
+{
+	auto maxclients = api->GetMaxClients();
+	ServerFrameId++;
+	for (int id = 1; id <= maxclients; id++)
+	{
+		auto cl = api->GetClient(id-1);
+		if (!cl || !cl->active)
+			continue;
+
+		entity_state_t state;
+		state.number = id;
+		state.sequence = cl->edict->v.sequence;
+		state.gaitsequence = cl->edict->v.gaitsequence;
+		state.frame = cl->edict->v.frame;
+		state.angles = cl->edict->v.angles;
+		state.origin = cl->edict->v.origin;
+		state.animtime = cl->edict->v.animtime;
+		state.framerate = cl->edict->v.framerate;
+		state.controller[0] = cl->edict->v.controller[0];
+		state.controller[1] = cl->edict->v.controller[1];
+		state.controller[2] = cl->edict->v.controller[2];
+		state.controller[3] = cl->edict->v.controller[3];
+		state.blending[0] = cl->edict->v.blending[1];
+		state.blending[1] = cl->edict->v.blending[1];
+		state.controller[3] = cl->edict->v.controller[3];
+		ProcessAnimParams(id-1, 0,
+			player_params_history[0].hist[SV_UPDATE_MASK & (ServerFrameId)][id-1],
+			player_params_history[0].hist[SV_UPDATE_MASK & (ServerFrameId - 1)][id-1],
+			&state);
+
+		size_t frame_index = SV_UPDATE_MASK & (ServerFrameId);
+		player_params[id - 1] = player_params_history[0].hist[frame_index][id - 1];
+	}	
+
+}
 void (PlayerPreThinkPre)(edict_t* pEntity)
 {
-	auto host_id = ENTINDEX(pEntity) - 1;
-	auto _host_client = api->GetClient(host_id);
+	auto host_id = ENTINDEX(pEntity);
+	auto _host_client = api->GetClient(host_id-1);
 	client_t* cl;
 	float cl_interptime = 0.f;
 	entity_state_t* state;
@@ -670,9 +708,15 @@ float CL_PureOrigin(int host, int target, float t, vec3_t& outorigin, vec3_t& ou
 	float				frac = 0.f;
 	vec3_t				delta;
 	vec3_t				pos, angles;
-
-	auto _host_client = api->GetClient(host);
-	CL_FindInterpolationUpdates(host, target, (_host_client->netchan.outgoing_sequence + 1), t, & ph0, & ph1);
+	if (host)
+	{
+		auto _host_client = api->GetClient(host-1);
+		CL_FindInterpolationUpdates(host, target, (_host_client->netchan.outgoing_sequence + 1), t, &ph0, &ph1);
+	}
+	else
+	{
+		CL_FindInterpolationUpdates(host, target, (ServerFrameId + 1), t, &ph0, &ph1);
+	}
 
 	if (!ph0 || !ph1)
 		return 0.0f;
@@ -739,9 +783,8 @@ float BitTime8(float f2)
 	return (float)(twVal / 100.0);
 }
 
-void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player_anim_params_s& prev_params, entity_state_s* state, edict_t* ent)
+void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player_anim_params_s& prev_params, entity_state_s* state)
 {
-	auto _host_client = api->GetClient(host_id);
 	int i;
 	if (state)
 	{
@@ -772,9 +815,17 @@ void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player
 		params.m_clOldTime = prev_params.m_clTime;
 
 		float t = gpGlobals->time;
-		t -= (_host_client->lastcmd.lerp_msec) * 0.001f;		
-		CL_PureOrigin(host_id, id, t , params.final_origin, params.final_angles);
-		
+		if (host_id)
+		{	
+			auto _host_client = api->GetClient(host_id - 1);
+			t -= (_host_client->lastcmd.lerp_msec) * 0.001f;
+		}
+		else
+		{
+			params.final_angles = state->angles;
+			params.final_origin = state->angles;
+		}
+		CL_PureOrigin(host_id, id, t, params.final_origin, params.final_angles);
 		params.m_prevgaitorigin = prev_params.final_origin;
 
 		params.prevangles = prev_params.final_angles;
@@ -858,6 +909,18 @@ void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player
 void PlayerPostThinkPost(edict_t* pEntity)
 {
 	nofind = 0;	
+
+	auto maxclients = api->GetMaxClients();
+	for (int id = 1; id <= maxclients; id++)
+	{
+		auto cl = api->GetClient(id - 1);
+		if (!cl || !cl->active)
+			continue;
+
+		size_t frame_index = SV_UPDATE_MASK & (ServerFrameId);
+
+		player_params[id - 1] = player_params_history[0].hist[frame_index][id - 1];
+	}
 	RETURN_META(MRES_IGNORED);
 }
 
@@ -865,33 +928,21 @@ void PlayerPostThinkPost(edict_t* pEntity)
 int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict_t* host, int hostflags, int player, unsigned char* pSet)
 {
 	int i;
-	auto host_id = ENTINDEX(host) - 1;
-	auto _host_client = api->GetClient(host_id);
+	auto host_id = ENTINDEX(host);
+	auto _host_client = api->GetClient(host_id-1);
 	if (!player || ent == host)
 	{
 		RETURN_META_VALUE(MRES_IGNORED, 0);
 	}
 	auto id = ENTINDEX(ent) - 1;
-	ProcessAnimParams(id, host_id, 
+	ProcessAnimParams(id, host_id,
 		player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id],
 		player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence - 1)][id],
-		state, host);
+		state);
 
 	RETURN_META_VALUE(MRES_IGNORED, 0);
 }
 
-void (UpdateClientDataPost)(const struct edict_s* ent, int sendweapons, struct clientdata_s* cd)
-{
-
-	auto host_id = ENTINDEX(ent) - 1;
-	auto _host_client = api->GetClient(host_id);
-	for (int i = 0; i < api->GetMaxClients(); i++)
-	{
-
-		//player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence + 1)][i] = player_params_history[host_id].hist[SV_UPDATE_MASK & _host_client->netchan.outgoing_sequence][i];
-	}
-	RETURN_META(MRES_IGNORED);
-}
 static bool Init = false;
 
 
