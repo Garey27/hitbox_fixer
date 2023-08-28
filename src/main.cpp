@@ -144,7 +144,7 @@ void (StartFramePost)()
 		size_t frame_index = SV_UPDATE_MASK & (ServerFrameId);
 		player_params[id - 1] = player_params_history[0].hist[frame_index][id - 1];
 	}	
-
+	RETURN_META(MRES_IGNORED);
 }
 void (PlayerPreThinkPre)(edict_t* pEntity)
 {
