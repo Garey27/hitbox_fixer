@@ -1114,6 +1114,12 @@ bool OnMetaAttach()
 			linux_game_library = "ag.so";
 			g_eGameType = GT_HL1;
 		}
+		else if (!strcmp(a, "firearms"))
+		{
+			game_library = "firearms.dll";
+			linux_game_library = "fa_i386.so";
+			g_eGameType = GT_HL1;
+		}
 		else if (!strcmp(a, "cstrike") || !strcmp(a, "cstrike_beta"))
 		{
 			g_eGameType = GT_CStrike;
@@ -1141,7 +1147,6 @@ bool OnMetaAttach()
 		return false;
 	}
 
-#if 1
 #if defined(__linux__) || defined(__APPLE__)
 
 
@@ -1170,28 +1175,11 @@ bool OnMetaAttach()
 	}
 	else
 	{
-#if 0
-		auto func = g_engfuncs.pfnGetBonePosition;
-		auto SV_SetupBonesfunc = 0;
-		for (byte* pos = (byte*)func, *end = (byte*)((DWORD)func + 512); pos < end; pos++)
-		{
-			/* .text:049A18FE FF D0                                   call    eax */
-			if (*pos == 0xff && *(pos + 1) == 0xd0)
-			{
-				orig_ppinterface = decltype(orig_ppinterface)(*(DWORD*)(pos - 7));
 
-			}
-		}
-		if (orig_ppinterface && (*orig_ppinterface)->version == 0x1)
-		{
-		}
-#endif
 		GetProcAddressHook = subhook_new(
 			(void*)GetProcAddress, (void*)GetProcAddressHooked, (subhook_flags_t)0);
 		subhook_install(GetProcAddressHook);
-
 	}
-#endif
 #endif
 	Init = true;
 	return true;
