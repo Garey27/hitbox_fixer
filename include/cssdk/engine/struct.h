@@ -97,12 +97,29 @@ struct client_t
 	int m_sendrescount;
 };
 
+struct player_ent_hist_params_s
+{
+	Vector origin;
+	Vector angles;
+	int sequence;
+	int gaitsequence;
+	float frame;
+	unsigned char controller[4];
+	unsigned char blending[2];
+	float sequencetime;
+	float animtime;
+	double framerate;
+	float sendTime;
+};
+
+
 struct player_anim_params_s
 {
 	int playerId;
 	int sequence;
 	int gaitsequence;
 	int m_nPlayerGaitSequences;
+	float serverSendTime;
 	
 	double f;
 	float frame;
@@ -111,10 +128,7 @@ struct player_anim_params_s
 	float gaityaw;
 	Vector origin;
 	Vector angles;
-	Vector final_origin;
-	Vector final_angles;
 	Vector m_prevgaitorigin;
-	Vector prevangles;
 	int prevsequence;
 	float sequencetime;
 	float animtime;

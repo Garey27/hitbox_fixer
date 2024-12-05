@@ -19,6 +19,8 @@ extern float(*g_pRotationMatrix)[3][4];
 extern float(*g_pBoneTransform)[128][3][4];
 extern void CS_StudioProcessParams(int player, player_anim_params_s& params);
 void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player_anim_params_s& prev_params, entity_state_s* state);
+void UpdateClientAnimParams(int id, int host_id, player_anim_params_s& params, float frametime, float interp);
+void VectorMA(const vec_t* veca, float scale, const vec_t* vecm, vec_t* out);
 sv_blending_interface_s** orig_ppinterface;
 sv_blending_interface_s orig_interface;
 // Resource counts
@@ -32,19 +34,130 @@ typedef int(*SV_BLENDING_INTERFACE_FUNC)(int, struct sv_blending_interface_s**, 
 constexpr int SV_UPDATE_BACKUP = MULTIPLAYER_BACKUP;
 constexpr int SV_UPDATE_MASK = (SV_UPDATE_BACKUP - 1);
 
-struct player_anim_params_hist_s
-{
-	player_anim_params_s hist[MULTIPLAYER_BACKUP][MAX_CLIENTS];
-};
 uint32_t ServerFrameId;
-player_anim_params_hist_s player_params_history[MAX_CLIENTS+1]{};
 player_anim_params_s player_params[MAX_CLIENTS]{};
 
+class AnimProcessor
+{
+	std::deque<std::pair<uint32_t, player_ent_hist_params_s>> history[33];
+public:
+	float interpTime[33];
+	player_anim_params_s processed_params[33];
+	void add_history(int id, uint32_t out_seq, entity_state_t* state)
+	{
+		player_ent_hist_params_s params;
+		params.sendTime = gpGlobals->time;
+		params.sequence = state->sequence;
+		params.gaitsequence = state->gaitsequence;
+		params.frame = uint32_t(state->frame);
+		params.angles.x = state->angles.x;
+		params.angles.y = state->angles.y;
+		params.angles.z = state->angles.z;
+
+		params.origin.x = state->origin.x;
+		params.origin.y = state->origin.y;
+		params.origin.z = state->origin.z;
+
+
+		params.animtime = state->animtime;
+		params.framerate = state->framerate;
+		params.controller[0] = state->controller[0];
+		params.controller[1] = state->controller[1];
+		params.controller[2] = state->controller[2];
+		params.controller[3] = state->controller[3];
+		params.blending[0] = state->blending[0];
+		params.blending[1] = state->blending[1];
+
+		history[id].push_back({ out_seq, params });
+	}
+	void addFrametime(int id, float time)
+	{
+		interpTime[id] += time;
+	}
+	bool process_anims(int id, uint32_t seq, float lerp_time, player_anim_params_s& params)
+	{
+		auto size = history[id].size();
+		if (!size)
+			return false;
+
+		auto processed = false;
+		for (auto& hist: history[id])
+		{
+			if (hist.first > seq)
+			{
+				vec3_t delta = (hist.second.origin - params.origin);
+				float frac = (interpTime[id] + lerp_time) / (hist.second.sendTime - params.serverSendTime);
+				if (frac > 1.f)
+					frac = 1.f;
+				VectorMA(params.origin, frac, delta, params.origin);
+				break;
+			}
+			interpTime[id] = 0.f;
+			processed = true;
+			params.serverSendTime = hist.second.sendTime;
+			params.sequence = hist.second.sequence;
+			params.gaitsequence = hist.second.gaitsequence;
+			params.frame = uint32_t(hist.second.frame);
+			params.angles.x = hist.second.angles.x;
+			params.angles.y = hist.second.angles.y;
+			params.angles.z = hist.second.angles.z;
+
+			params.origin.x = hist.second.origin.x;
+			params.origin.y = hist.second.origin.y;
+			params.origin.z = hist.second.origin.z;
+
+
+			params.animtime = params.m_clTime;
+			params.framerate = hist.second.framerate;
+
+			if (params.sequence < 0)
+				params.sequence = 0;
+
+			// sequence has changed, hold the previous sequence info
+			if (params.sequence != params.prevsequence)
+			{
+				params.sequencetime = params.animtime + 0.01f;
+
+				// save current blends to right lerping from last sequence
+				for (int i = 0; i < 2; i++)
+					params.prevseqblending[i] = params.blending[i];
+				params.prevsequence = params.sequence; // save old sequence	
+			}
+
+
+			// copy controllers
+			for (int i = 0; i < 4; i++)
+			{
+				if (hist.second.controller[i] != params.controller[i])
+					params.prevcontroller[i] = params.controller[i];
+			}
+
+			// copy blends
+			for (int i = 0; i < 2; i++)
+				params.prevblending[i] = params.blending[i];
+
+			params.controller[0] = hist.second.controller[0];
+			params.controller[1] = hist.second.controller[1];
+			params.controller[2] = hist.second.controller[2];
+			params.controller[3] = hist.second.controller[3];
+			params.blending[0] = hist.second.blending[0];
+			params.blending[1] = hist.second.blending[1];
+		}
+		while (!history[id].empty() && history[id].front().first < seq)
+		{
+			history[id].pop_front();
+		}
+		return processed;
+	}
+
+
+};
+AnimProcessor PlayerAnimProcessor[33];
 subhook_t Server_GetBlendingInterfaceHook{};
 
 subhook_t GetProcAddressHook{};
 subhook_t dlsymHook{};
-//#define DEBUG
+#define DEBUG
 #ifdef DEBUG
 
 cvar_t hbf_timescale = { "hbf_timescale", "1", FCVAR_SERVER | FCVAR_PROTECTED, 0.0f, NULL };
@@ -61,7 +174,7 @@ void (PutInServer)(edict_t* pEntity)
 		RETURN_META(MRES_IGNORED);
 	}
 	auto host_id = ENTINDEX(pEntity);
-	memset(&player_params_history[host_id], 0, sizeof(player_params_history[host_id]));
+	PlayerAnimProcessor[host_id] = {};
 	RETURN_META(MRES_IGNORED);
 }
 
@@ -83,69 +196,6 @@ void VectorMA(const vec_t* veca, float scale, const vec_t* vecm, vec_t* out)
 	out[1] = scale * vecm[1] + veca[1];
 	out[2] = scale * vecm[2] + veca[2];
 }
-#ifdef DEBUG
-void TestFunc(uint32_t host_id, float t, float frac, uintptr_t sequence)
-{
-	auto _host_client = api->GetClient(host_id);
-	for (int i = 0; i < api->GetMaxClients(); i++)
-	{
-		auto cl = api->GetClient(i);
-		player_params[i] = player_params_history[host_id].hist[SV_UPDATE_MASK & sequence][i];
-		if (cl == _host_client || !cl->active)
-			continue;
-
-		auto model = api->GetModel(cl->edict->v.modelindex);
-		CS_StudioSetupBones(
-			model,
-			cl->edict->v.frame,
-			cl->edict->v.sequence,
-			cl->edict->v.angles,
-			cl->edict->v.origin,
-			cl->edict->v.controller,
-			cl->edict->v.blending,
-			-1,
-			cl->edict);
-		memcpy(&g_pRotationMatrixCopy, g_pRotationMatrix, sizeof(g_pRotationMatrixCopy));
-		memcpy(&g_pBoneTransformCopy, g_pBoneTransform, sizeof(g_pBoneTransformCopy));
-	}
-}
-#endif
-void (StartFramePost)()
-{
-	auto maxclients = api->GetMaxClients();
-	ServerFrameId++;
-	for (int id = 1; id <= maxclients; id++)
-	{
-		auto cl = api->GetClient(id-1);
-		if (!cl || !cl->active)
-			continue;
-
-		entity_state_t state;
-		state.number = id;
-		state.sequence = cl->edict->v.sequence;
-		state.gaitsequence = cl->edict->v.gaitsequence;
-		state.frame = cl->edict->v.frame;
-		state.angles = cl->edict->v.angles;
-		state.origin = cl->edict->v.origin;
-		state.animtime = cl->edict->v.animtime;
-		state.framerate = cl->edict->v.framerate;
-		state.controller[0] = cl->edict->v.controller[0];
-		state.controller[1] = cl->edict->v.controller[1];
-		state.controller[2] = cl->edict->v.controller[2];
-		state.controller[3] = cl->edict->v.controller[3];
-		state.blending[0] = cl->edict->v.blending[1];
-		state.blending[1] = cl->edict->v.blending[1];
-		state.controller[3] = cl->edict->v.controller[3];
-		ProcessAnimParams(id-1, 0,
-			player_params_history[0].hist[SV_UPDATE_MASK & (ServerFrameId)][id-1],
-			player_params_history[0].hist[SV_UPDATE_MASK & (ServerFrameId - 1)][id-1],
-			&state);
-
-		size_t frame_index = SV_UPDATE_MASK & (ServerFrameId);
-		player_params[id - 1] = player_params_history[0].hist[frame_index][id - 1];
-	}	
-	RETURN_META(MRES_IGNORED);
-}
 void (PlayerPreThinkPre)(edict_t* pEntity)
 {
 	auto host_id = ENTINDEX(pEntity);
@@ -153,13 +203,10 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 	client_t* cl;
 	float cl_interptime = 0.f;
 	entity_state_t* state;
-	sv_adjusted_positions_t* pos;
 	int i;
 	client_frame_t* frame;
 	vec3_t origin;
 	vec3_t delta;
-	float realtime = g_engfuncs.pfnTime();
-	double targettime; // FP precision fix
 	vec3_t angles;
 	vec3_t mins;
 	vec3_t maxs;
@@ -195,28 +242,37 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 		cl = api->GetClient(state->number - 1);
 		if (cl == _host_client || !cl->active)
 			continue;
-
-		player_params[state->number - 1] = player_params_history[host_id].hist[frame_index][state->number - 1];		
+		auto client_id = state->number - 1;
+		auto cmd = _host_client->lastcmd;
+		PlayerAnimProcessor[host_id].process_anims(client_id, _host_client->netchan.incoming_acknowledged, cmd.lerp_msec * 0.001f, PlayerAnimProcessor[host_id].processed_params[client_id]);
+		PlayerAnimProcessor[host_id].addFrametime(client_id, cmd.msec * 0.001f);
+		if (host_id == 1 && i == 1)
+		{
+			UpdateClientAnimParams(client_id, host_id, PlayerAnimProcessor[host_id].processed_params[client_id], cmd.msec * 0.001f, cmd.lerp_msec * 0.001f);
+			//UTIL_ServerPrint("%f\n", player_params[client_id].gaityaw);
+		}
+		player_params[client_id] = PlayerAnimProcessor[host_id].processed_params[client_id];
 #ifdef DEBUG
 		static bool Init = false;
-		if (!Init)
-		{
-			Init = true;
-			//UTIL_ServerPrint("\n\n\nDEBUG AT %p | %p \n\n\n", &g_pRotationMatrixCopy, &g_pBoneTransformCopy);
-			g_engfuncs.pfnClientCommand(pEntity, "hbdeb_test_rot_matrix %x \n", &g_pRotationMatrixCopy);
-			g_engfuncs.pfnClientCommand(pEntity, "hbdeb_test_transform %x \n", &g_pBoneTransformCopy);
-			g_engfuncs.pfnClientCommand(pEntity, "hbdeb_test_hitboxes %x \n", &TestingHitboxes);
-			g_engfuncs.pfnClientCommand(pEntity, "hbdeb_test_sequence %x \n", (uintptr_t)TestFunc);
-			g_engfuncs.pfnClientCommand(pEntity, "r_drawentities 6 \n", &TestingHitboxes);
-			g_engfuncs.pfnAddServerCommand("test_hb", [] {
-				TestingHitboxes = !TestingHitboxes;
-				});
-		}
-#if 0
-		if (i == 1 && cl->edict->v.modelindex)
-		{
-			auto model = api->GetModel(cl->edict->v.modelindex);
 		
+#if 10
+		if (host_id == 1 && i == 1 && cl->edict->v.modelindex)
+		{
+			if (!Init)
+			{
+				Init = true;
+				UTIL_ServerPrint("\n\n\nDEBUG AT %p | %p \n\n\n", &g_pRotationMatrixCopy, &g_pBoneTransformCopy);
+				g_engfuncs.pfnClientCommand(pEntity, "hbdeb_test_rot_matrix %x \n", &g_pRotationMatrixCopy);
+				g_engfuncs.pfnClientCommand(pEntity, "hbdeb_test_transform %x \n", &g_pBoneTransformCopy);
+				g_engfuncs.pfnClientCommand(pEntity, "hbdeb_test_hitboxes %x \n", &TestingHitboxes);
+				g_engfuncs.pfnClientCommand(pEntity, "r_drawentities 6 \n", &TestingHitboxes);
+				g_engfuncs.pfnAddServerCommand("test_hb", [] {
+					TestingHitboxes = !TestingHitboxes;
+					});
+			}
+			auto model = api->GetModel(cl->edict->v.modelindex);
+			//UTIL_ServerPrint("%f %f %f\n", player_params[state->number - 1].origin[0], player_params[state->number - 1].origin[1], player_params[state->number - 1].origin[2]);
+
 			CS_StudioSetupBones(
 				model,
 				cl->edict->v.frame,
@@ -227,6 +283,8 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
 				cl->edict->v.blending,
 				-1,
 				cl->edict);
+			memcpy(&g_pRotationMatrixCopy, g_pRotationMatrix, sizeof(g_pRotationMatrixCopy));
+			memcpy(&g_pBoneTransformCopy, g_pBoneTransform, sizeof(g_pBoneTransformCopy));
 
 		}
 #endif
@@ -255,8 +313,8 @@ void StudioEstimateGait(player_anim_params_s& params)
 		return;
 	}
 
-	est_velocity = params.final_origin - params.m_prevgaitorigin;
-	params.m_prevgaitorigin = params.final_origin;
+	est_velocity = params.origin - params.m_prevgaitorigin;
+	params.m_prevgaitorigin = params.origin;
 
 	params.m_flGaitMovement = est_velocity.Length();
 	
@@ -268,7 +326,7 @@ void StudioEstimateGait(player_anim_params_s& params)
 		est_velocity.y = 0;
 	}
 
-	float flYaw = params.final_angles.y - params.gaityaw;
+	float flYaw = params.angles.y - params.gaityaw;
 
 
 	if (params.sequence > 100) {
@@ -351,10 +409,8 @@ void CalculatePitchBlend(player_anim_params_s& params)
 {
 	int iBlend;
 
-	StudioPlayerBlend(&iBlend, &params.final_angles.x);
+	StudioPlayerBlend(&iBlend, &params.angles.x);
 
-
-	params.prevangles.x = params.final_angles.x;
 	params.blending[1] = iBlend;
 	params.prevblending[1] = params.blending[1];
 	params.prevseqblending[1] = params.blending[1];
@@ -366,7 +422,7 @@ void CalculateYawBlend(player_anim_params_s& params)
 	StudioEstimateGait(params);
 
 	// calc side to side turning
-	float flYaw = fmod(params.final_angles[1] - params.gaityaw, 360.0f);
+	float flYaw = fmod(params.angles[1] - params.gaityaw, 360.0f);
 
 	if (flYaw < -180)
 		flYaw += 360;
@@ -398,12 +454,10 @@ void CalculateYawBlend(player_anim_params_s& params)
 	params.blending[0] = (int)(blend_yaw);
 	params.prevblending[0] = params.blending[0];
 	params.prevseqblending[0] = params.blending[0];
-	params.final_angles[1] = params.gaityaw;
+	params.angles[1] = params.gaityaw;
 
-	if (params.final_angles[1] < 0)
-		params.final_angles[1] += 360;
-
-	params.prevangles[1] = params.final_angles[1];
+	if (params.angles[1] < 0)
+		params.angles[1] += 360;
 }
 
 /*
@@ -452,8 +506,8 @@ void HL_StudioEstimateGait(player_anim_params_s& params)
 		dt = 1;
 
 
-	VectorSubtract(params.final_origin, params.m_prevgaitorigin, est_velocity);
-	VectorCopy(params.final_origin, params.m_prevgaitorigin);
+	VectorSubtract(params.origin, params.m_prevgaitorigin, est_velocity);
+	VectorCopy(params.origin, params.m_prevgaitorigin);
 	params.m_flGaitMovement = (est_velocity).Length();
 
 	if (dt <= 0.0f || params.m_flGaitMovement / dt < 5.0f)
@@ -465,7 +519,7 @@ void HL_StudioEstimateGait(player_anim_params_s& params)
 
 	if (est_velocity[1] == 0.0f && est_velocity[0] == 0.0f)
 	{
-		float	flYawDiff = params.final_angles[1] - params.gaityaw;
+		float	flYawDiff = params.angles[1] - params.gaityaw;
 
 		flYawDiff = flYawDiff - (int)(flYawDiff / 360) * 360;
 		if (flYawDiff > 180.0f) flYawDiff -= 360.0f;
@@ -528,16 +582,15 @@ void HL_StudioProcessGait(player_anim_params_s& params)
 	pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + params.sequence;
 
 
-	HL_StudioPlayerBlend(pseqdesc, &iBlend, &params.final_angles[0]);
+	HL_StudioPlayerBlend(pseqdesc, &iBlend, &params.angles[0]);
 
-	params.prevangles[0] = params.final_angles[0];
 	params.blending[0] = iBlend;
 	params.prevblending[0] = params.blending[0];
 	params.prevseqblending[0] = params.blending[0];
 	HL_StudioEstimateGait(params);
 
 	// calc side to side turning
-	flYaw = params.final_angles[1] - params.gaityaw;
+	flYaw = params.angles[1] - params.gaityaw;
 	flYaw = flYaw - (int)(flYaw / 360) * 360;
 	if (flYaw < -180.0f) flYaw = flYaw + 360.0f;
 	if (flYaw > 180.0f) flYaw = flYaw - 360.0f;
@@ -565,9 +618,8 @@ void HL_StudioProcessGait(player_anim_params_s& params)
 	params.prevcontroller[2] = params.controller[2];
 	params.prevcontroller[3] = params.controller[3];
 
-	params.final_angles[1] = params.gaityaw;
-	if (params.final_angles[1] < -0) params.final_angles[1] += 360.0f;
-	params.prevangles[1] = params.final_angles[1];
+	params.angles[1] = params.gaityaw;
+	if (params.angles[1] < -0) params.angles[1] += 360.0f;
 
 	if (params.gaitsequence >= g_pstudiohdr->numseq)
 		params.gaitsequence = 0;
@@ -590,12 +642,13 @@ void StudioProcessGait(player_anim_params_s& params)
 	mstudioseqdesc_t* pseqdesc;
 	float dt = params.m_clTime - params.m_clOldTime;
 
-	if (dt < 0.0)
+	if (dt < 0.f)
 		dt = 0;
 
-	else if (dt > 1.0)
-		dt = 1;
+	else if (dt > 1.f)
+		dt = 1.f;
 
+	
 	CalculateYawBlend(params);
 	CalculatePitchBlend(params);
 	auto ent = INDEXENT(params.playerId);
@@ -621,38 +674,6 @@ void StudioProcessGait(player_anim_params_s& params)
 
 	if (params.gaitframe < 0)
 		params.gaitframe += pseqdesc->numframes;
-}
-
-qboolean CL_FindInterpolationUpdates(int host, int target, int sequence, float targettime, player_anim_params_s** ph0, player_anim_params_s** ph1)
-{
-	qboolean	extrapolate = true;
-	int	i, i0, i1, imod;
-	float	at;
-
-	i0 = (sequence) & SV_UPDATE_MASK;
-	i1 = (sequence - 1) & SV_UPDATE_MASK;
-	imod = i0;
-
-	for (i = 1; i < SV_UPDATE_BACKUP - 1; i++)
-	{
-		at = player_params_history[host].hist[(imod - i) & SV_UPDATE_MASK][target].animtime;
-
-		if (at == 0.0)
-			break;
-
-		if (at < targettime)
-		{
-			i0 = ((imod - i) + 1) & SV_UPDATE_MASK;
-			i1 = (imod - i) & SV_UPDATE_MASK;
-			extrapolate = false;
-			break;
-		}
-	}
-
-	if (ph0 != NULL) *ph0 = &player_params_history[host].hist[i0][target];
-	if (ph1 != NULL) *ph1 = &player_params_history[host].hist[i1][target];
-	
-	return extrapolate;
 }
 
 void NormalizeAngles(vec3_t& angles)
@@ -701,166 +722,21 @@ inline void InterpolateAngles(vec3_t start, vec3_t end, vec3_t& output, float fr
 
 	NormalizeAngles(output);
 }
-float CL_PureOrigin(int host, int target, float t, vec3_t& outorigin, vec3_t& outangles)
+
+void UpdateClientAnimParams(int id, int host_id, player_anim_params_s& params, float frametime, float interp)
 {
-	player_anim_params_s* ph0, * ph1;
-	float				t1, t0;
-	float				frac = 0.f;
-	vec3_t				delta;
-	vec3_t				pos, angles;
-	if (host)
-	{
-		auto _host_client = api->GetClient(host-1);
-		CL_FindInterpolationUpdates(host, target, (_host_client->netchan.outgoing_sequence + 1), t, &ph0, &ph1);
-	}
-	else
-	{
-		CL_FindInterpolationUpdates(host, target, (ServerFrameId + 1), t, &ph0, &ph1);
-	}
+	params.playerId = id + 1;
 
-	if (!ph0 || !ph1)
-		return 0.0f;
+	params.m_clOldTime = params.m_clTime;
+	params.m_clTime += frametime;
+	//params.animtime = params.m_clTime;
+	auto _host_client = api->GetClient(host_id - 1);
+	auto t = params.m_clTime + interp;	
 
-	t0 = ph0->animtime;
-	t1 = ph1->animtime;
-
-
-	if (t0 != 0)
-	{
-		VectorSubtract(ph0->origin, ph1->origin, delta);
-
-#define bound( min, num, max )	((num) >= (min) ? ((num) < (max) ? (num) : (max)) : (min))
-		if (t0 != t1)
-			frac = bound(0, (t - t1) / (t0 - t1), 1.2);
-		else
-			frac = 1.0f;
-		//frac = (t - t1) / (t0 - t1);
-		VectorMA(ph1->origin, frac, delta, pos);
-		InterpolateAngles(ph0->angles, ph1->angles, angles, frac);
-
-		VectorCopy(pos, outorigin);
-		VectorCopy(angles, outangles);
-	}
-	else
-	{
-		VectorCopy(ph1->origin, outorigin);
-		VectorCopy(ph1->angles, outangles);
-	}
-	return frac;
-}
-
-
-float BitAngle(float fAngle, int numbits)
-{
-	if (numbits >= 32) {
-		return fAngle;
-	}
-
-	unsigned int shift = (1 << numbits);
-	unsigned int mask = shift - 1;
-
-	int d = (int)(shift * fmod((double)fAngle, 360.0)) / 360;
-	d &= mask;
-
-	float angle =  (float)(d * (360.0 / (1 << numbits)));
-
-
-	if (angle > 180.0)
-	{
-		angle -= 360.0;
-	}
-	else if (angle < -180.0)
-	{
-		angle += 360.0;
-	}
-
-	return angle;
-}
-
-float BitTime8(float f2)
-{
-	int32 twVal = (int)(f2 * 100.0);
-	return (float)(twVal / 100.0);
-}
-
-void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player_anim_params_s& prev_params, entity_state_s* state)
-{
-	int i;
-	if (state)
-	{
-		params = prev_params;
-		params.playerId = state->number;
-		params.sequence = state->sequence;
-		params.gaitsequence = state->gaitsequence;
-		params.frame = uint32_t(state->frame);
-		params.angles.x = BitAngle(state->angles.x, 16);
-		params.angles.y = BitAngle(state->angles.y, 16);
-		params.angles.z = BitAngle(state->angles.z, 16);
-
-		params.origin.x = int(state->origin.x * 32) / 32.f;
-		params.origin.y = int(state->origin.y * 32) / 32.f;
-		params.origin.z = int(state->origin.z * 32) / 32.f;
-
-
-		params.animtime = BitTime8(state->animtime);
-		params.framerate = state->framerate;
-		params.controller[0] = state->controller[0];
-		params.controller[1] = state->controller[1];
-		params.controller[2] = state->controller[2];
-		params.controller[3] = state->controller[3];
-		params.blending[0] = state->blending[0];
-		params.blending[1] = state->blending[1];
-		params.m_clTime = gpGlobals->time;
-
-		params.m_clOldTime = prev_params.m_clTime;
-
-		float t = gpGlobals->time;
-		if (host_id)
-		{	
-			auto _host_client = api->GetClient(host_id - 1);
-			t -= (_host_client->lastcmd.lerp_msec) * 0.001f;
-		}
-		else
-		{
-			params.final_angles = state->angles;
-			params.final_origin = state->angles;
-		}
-		CL_PureOrigin(host_id, id, t, params.final_origin, params.final_angles);
-		params.m_prevgaitorigin = prev_params.final_origin;
-
-		params.prevangles = prev_params.final_angles;
-		params.prevframe = prev_params.f;
-		params.prevsequence = prev_params.sequence;
-
-		if (params.sequence < 0)
-			params.sequence = 0;
-
-		// sequence has changed, hold the previous sequence info
-		if (params.sequence != params.prevsequence)
-		{
-			params.sequencetime = params.animtime + 0.01f;
-
-			// save current blends to right lerping from last sequence
-			for (int i = 0; i < 2; i++)
-				params.prevseqblending[i] = prev_params.blending[i];
-			params.prevsequence = prev_params.sequence; // save old sequence	
-		}
-
-
-		// copy controllers
-		for (i = 0; i < 4; i++)
-		{
-			if (params.controller[i] != prev_params.controller[i])
-				params.prevcontroller[i] = prev_params.controller[i];
-		}
-
-		// copy blends
-		for (i = 0; i < 2; i++)
-			params.prevblending[i] = prev_params.blending[i];
-
-
-	}
-
+	//params.m_prevgaitorigin = params.origin;
+	//params.prevangles = params.angles;
+	
+	//}
 	if (g_eGameType == GT_CStrike || g_eGameType == GT_CZero)
 	{
 		if (params.gaitsequence)
@@ -910,17 +786,6 @@ void PlayerPostThinkPost(edict_t* pEntity)
 {
 	nofind = 0;	
 
-	auto maxclients = api->GetMaxClients();
-	for (int id = 1; id <= maxclients; id++)
-	{
-		auto cl = api->GetClient(id - 1);
-		if (!cl || !cl->active)
-			continue;
-
-		size_t frame_index = SV_UPDATE_MASK & (ServerFrameId);
-
-		player_params[id - 1] = player_params_history[0].hist[frame_index][id - 1];
-	}
 	RETURN_META(MRES_IGNORED);
 }
 
@@ -935,10 +800,7 @@ int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict
 		RETURN_META_VALUE(MRES_IGNORED, 0);
 	}
 	auto id = ENTINDEX(ent) - 1;
-	ProcessAnimParams(id, host_id,
-		player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence)][id],
-		player_params_history[host_id].hist[SV_UPDATE_MASK & (_host_client->netchan.outgoing_sequence - 1)][id],
-		state);
+	PlayerAnimProcessor[host_id].add_history(id, _host_client->netchan.outgoing_sequence, state);
 
 	RETURN_META_VALUE(MRES_IGNORED, 0);
 }

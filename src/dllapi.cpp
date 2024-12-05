@@ -81,7 +81,7 @@ DLL_FUNCTIONS gFunctionTable_Post =
 	NULL,					// pfnServerDeactivate
 	NULL,					// pfnPlayerPreThink
 	PlayerPostThinkPost,	// pfnPlayerPostThink
-	StartFramePost,					// pfnStartFrame
+	NULL,					// pfnStartFrame
 	NULL,					// pfnParmsNewLevel
 	NULL,					// pfnParmsChangeLevel
 	NULL,					// pfnGetGameDescription

@@ -55,7 +55,6 @@ extern int UTIL_ReadFlags(const char* c);
 extern void CS_StudioSetupBones(model_t* pModel, float frame, int sequence, const vec_t* angles, const vec_t* origin, const byte* pcontroller, const byte* pblending, int iBone, const edict_t* pEdict);
 extern void HL_StudioSetupBones(model_t* pModel, float frame, int sequence, const vec_t* angles, const vec_t* origin, const byte* pcontroller, const byte* pblending, int iBone, const edict_t* pEdict);
 extern void (PlayerPreThinkPre)(edict_t* pEntity);
-extern void (StartFramePost)(void);
 extern void (PlayerPostThinkPost)(edict_t* pEntity);
 extern void (UpdateClientDataPost) (const struct edict_s* ent, int sendweapons, struct clientdata_s* cd);
 extern int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict_t* host, int hostflags, int player, unsigned char* pSet);
