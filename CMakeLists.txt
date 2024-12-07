@@ -1,7 +1,4 @@
 cmake_minimum_required(VERSION 3.16)
-project(HitboxFix)
-
-#set(CMAKE_CXX_STANDARD 14)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -65,7 +62,7 @@ add_subdirectory(dep/lz4)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")#-fvisibility=hidden -s -ffunction-sections -fdata-sections -fpermissive -Wno-write-strings -Wno-int-to-pointer-cast -Wno-unused-result -Wno-multichar 
    
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-   target_link_options(HitboxFix PRIVATE /EXPORT:GiveFnptrsToDll=_GiveFnptrsToDll@8 /SECTION:.data,RW)
+    target_link_options(HitboxFix PRIVATE /EXPORT:GiveFnptrsToDll=_GiveFnptrsToDll@8 /SECTION:.data,RW)
     target_compile_options(HitboxFix PRIVATE 
    /std:c++20
     /ZI
