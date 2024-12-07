@@ -1,6 +1,6 @@
 name: CMake
 
-on: [push]
+on: [push, pull_request]
 
 jobs:
   build_linux:
@@ -37,7 +37,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: linux
-        path: ${{github.workspace}}/build/bin/hitbox_fix_mm.so
+        path: ${{github.workspace}}/build/bin/hitbox_fix_mm_i386.so
           
   build_windows:
     runs-on: windows-latest
@@ -73,13 +73,13 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: windows
-        path: ${{github.workspace}}/build/bin/hitbox_fix_mm.dll
+        path: ${{github.workspace}}/build/bin/Release/hitbox_fix_mm.dll
 
     - name: Deploy artifacts
       uses: actions/upload-artifact@v4
       with:
         name: windows
-        path: ${{github.workspace}}/build/bin/hitbox_vis.dll
+        path: ${{github.workspace}}/build/bin/Release/hitbox_vis.dll
 
   publish:
     name: 'Publish'
