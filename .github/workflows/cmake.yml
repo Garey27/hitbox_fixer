@@ -101,7 +101,7 @@ jobs:
           mkdir -p amxmodx/hitboxfixer vis
           cp hitbox_fix_mm.dll hitbox_fix_mm_i386.so amxmodx/hitboxfixer
           cp hitbox_vis.dll vis/hitbox_vis.asi
-          7z a -tzip ahitbox_fix-bin-${RELEASE_VERSION}.zip amxmodx
+          7z a -tzip hitbox_fix-bin-${RELEASE_VERSION}.zip amxmodx
         
       - name: Release
         uses: softprops/action-gh-release@v2
