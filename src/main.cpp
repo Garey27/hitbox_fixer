@@ -298,12 +298,12 @@ void CvarValue2_PreHook(const edict_t* pEnt, int requestID, const char* cvarName
   *can_debug = false;
   cvar_requests.erase(requestID);
 
-  if (!strcmpi(cvarValue, "Bad CVAR request"))
+  if (!strcmp(cvarValue, "Bad CVAR request"))
   {
     RETURN_META(MRES_IGNORED);
   }
 
-  if (strcmpi(cvarValue, "1.0"))
+  if (strcmp(cvarValue, "1.0"))
   {
     RETURN_META(MRES_IGNORED);
   }
