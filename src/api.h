@@ -21,8 +21,11 @@ struct rehlds_api : players_api
 		}
 		ip_sockets = decltype(ip_sockets)(PatternScan::FindPattern("8B 34 BD *? ? ? ? EB 23", "swds.dll"));
 #else
-		ip_sockets = decltype(ip_sockets)(PatternScan::FindPattern("8B 1C AD *? ? ? ? 83 FB FF 0F 84 06 01 00 00", "engine_i486.so"));
+		ip_sockets = decltype(ip_sockets)(PatternScan::FindPattern("8B 1C AD *? ? ? ? 83 FB FF 0F 84 06 01 00 00", "engine_i486.so"))
+		if(!ip_sockets)
+			ip_sockets = decltype(ip_sockets)(PatternScan::FindPattern("8B AC 83 *? ? ? ? 83 FD FF", "engine_i486.so"));
 #endif
+		
 		return RehldsApi_Init();
 	}
 	client_t* GetClient(size_t index) override
