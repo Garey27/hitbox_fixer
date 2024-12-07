@@ -73,13 +73,8 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: windows
-        path: ${{github.workspace}}/build/bin/Release/hitbox_fix_mm.dll
+        path: ${{github.workspace}}/build/bin/Release/*.dll
 
-    - name: Deploy artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: windows
-        path: ${{github.workspace}}/build/bin/Release/hitbox_vis.dll
 
   publish:
     name: 'Publish'
@@ -104,8 +99,8 @@ jobs:
       - name: Archive artifacts
         run: |
           mkdir -p amxmodx/hitboxfixer vis
-          cp hitbox_fix_mm.dll hitbox_fix_mm.so amxmodx/hitboxfixer
-          cp hitbox_vis.dll vis/hitbox_vis
+          cp hitbox_fix_mm.dll hitbox_fix_mm_i386.so amxmodx/hitboxfixer
+          cp hitbox_vis.dll vis/hitbox_vis.asi
           7z a -tzip ahitbox_fix-bin-${RELEASE_VERSION}.zip amxmodx
         
       - name: Release
