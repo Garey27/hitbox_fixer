@@ -60,12 +60,11 @@ set(SUBHOOK_TESTS  "" OFF )
 
 
 add_subdirectory(dep/subhook) 
+add_subdirectory(dep/lz4)
+
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")#-fvisibility=hidden -s -ffunction-sections -fdata-sections -fpermissive -Wno-write-strings -Wno-int-to-pointer-cast -Wno-unused-result -Wno-multichar 
    
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-    set_target_properties(HitboxFix PROPERTIES
-    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" # static linking
-    )
    target_link_options(HitboxFix PRIVATE /EXPORT:GiveFnptrsToDll=_GiveFnptrsToDll@8 /SECTION:.data,RW)
     target_compile_options(HitboxFix PRIVATE 
    /std:c++20
@@ -75,14 +74,14 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")#-fvisibility=hidden -s -ffunction-sec
     #/EHsc   
     #/GR- 
     )
-set_target_properties(subhook PROPERTIES
-    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" # static linking
-)
+    set_target_properties(subhook PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" # static linking
+    )
 
-set_target_properties(HitboxFix PROPERTIES
-    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" # static linking
-)
-
+    set_target_properties(HitboxFix PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" # static linking
+    )
+    
     
 target_link_libraries(HitboxFix PRIVATE psapi.lib dbghelp.lib Ws2_32.lib)
 else()
@@ -95,6 +94,12 @@ else()
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -m32")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}  -static-libstdc++ -static-libgcc")
     set_target_properties(HitboxFix PROPERTIES COMPILE_FLAGS "-m32" LINK_FLAGS "-m32" POSITION_INDEPENDENT_CODE ON)
+    target_compile_options(HitboxFix PRIVATE -m32)
+    target_link_options(HitBoxFix PRIVATE -m32)
+    target_compile_options(LZ4 PRIVATE -m32)
+    target_link_options(LZ4 PRIVATE -m32)
+    target_compile_options(subhook PRIVATE -m32)
+    target_link_options(subhook PRIVATE -m32)
 
 endif()
 
@@ -103,7 +108,6 @@ target_link_libraries(HitboxFix PRIVATE subhook LZ4)
 
 set_target_properties(HitboxFix PROPERTIES PREFIX "")
 
-add_subdirectory(dep/lz4)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 
 set_target_properties(LZ4 PROPERTIES
