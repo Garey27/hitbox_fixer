@@ -1,0 +1,3 @@
+[submodule "vis/dep/rehlds"]
+	path = vis/dep/rehlds
+	url = https://github.com/rehlds/ReHLDS
