@@ -6,7 +6,7 @@ struct players_api
 	virtual bool Init() = 0;
 	virtual client_t* GetClient(size_t index) = 0;
 	virtual model_t* GetModel(size_t model_index) = 0;
-	virtual SOCKET* GetSocket(size_t sock_index) = 0;
+	virtual void SendPacket(unsigned int length, void *data, const netchan_t &chan) = 0;
 	virtual double GetRealTime() = 0;
 };
 
@@ -19,11 +19,6 @@ struct rehlds_api : players_api
 		{
 			return false;
 		}
-		ip_sockets = decltype(ip_sockets)(PatternScan::FindPattern("8B 34 BD *? ? ? ? EB 23", "swds.dll"));
-#else
-		ip_sockets = decltype(ip_sockets)(PatternScan::FindPattern("8B 1C AD *? ? ? ? 83 FB FF 0F 84 06 01 00 00", "engine_i486.so"));
-		if(!ip_sockets)
-			ip_sockets = decltype(ip_sockets)(PatternScan::FindPattern("8B AC 83 *? ? ? ? 83 FD FF", "engine_i486.so"));
 #endif
 		
 		return RehldsApi_Init();
@@ -44,13 +39,13 @@ struct rehlds_api : players_api
 	{
 		return g_RehldsFuncs->GetRealTime();
 	}
-	SOCKET* GetSocket(size_t sock_index)
+	void SendPacket(unsigned int length, void *data, const netchan_t &chan)
 	{
-		return ip_sockets[sock_index];
+		g_RehldsFuncs->NET_SendPacket(length, data, chan.remote_address);
 	}
-	inline static SOCKET** ip_sockets;
 };
 
+void NetadrToSockadr(const netadr_t *a, struct sockaddr *s);
 
 struct hlds_api : players_api
 {
@@ -92,9 +87,12 @@ struct hlds_api : players_api
 	{
 		return sv->models[model_index];
 	}
-	SOCKET* GetSocket(size_t sock_index)
+	void SendPacket(unsigned int length, void *data, const netchan_t &chan)
 	{
-		return ip_sockets[sock_index];
+		auto sock = ip_sockets[chan.sock];
+		struct sockaddr addr;
+		NetadrToSockadr(&chan.remote_address, &addr);
+		sendto((SOCKET)sock, static_cast<const char *>(data), length, 0, &addr, sizeof(addr));
 	}
 	double GetRealTime()
 	{

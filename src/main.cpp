@@ -1232,10 +1232,6 @@ void (SendDebugInfo)(size_t player_index)
   std::vector<char> output(worst_size);
   size_t output_size = LZ4_compress_fast(static_cast<const char*>(buffer.Base()), output.data(), buffer.TellPut(), worst_size, 1);
 
-  auto sock = api->GetSocket(host_plr->netchan.sock);
-  struct sockaddr addr;
-  NetadrToSockadr(&host_plr->netchan.remote_address, &addr);
-
   buffer.SeekPut(CUtlBuffer::SEEK_HEAD, 0);
   uint32_t w1 = host_plr->netchan.outgoing_sequence;
   uint32_t w2 = host_plr->netchan.incoming_sequence - 1;
@@ -1250,7 +1246,7 @@ void (SendDebugInfo)(size_t player_index)
   COM_Munge2(reinterpret_cast<unsigned char*>(buffer.Base()) + 8, buffer.TellPut() - 8, seq & 0xff);
   //buffer.PutChar(0);
 
-  sendto((SOCKET)sock, static_cast<const char*>(buffer.Base()), buffer.TellPut(), 0, &addr, sizeof(addr));
+  api->SendPacket(buffer.TellPut(), buffer.Base(), host_plr->netchan);
   host_plr->netchan.outgoing_sequence++;
 }
 void C_ServerActivate(edict_t* pEdictList, int edictCount, int clientMax)
