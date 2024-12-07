@@ -3,6 +3,10 @@ project(HitboxFix)
 
 #set(CMAKE_CXX_STANDARD 14)
 
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 include(cmake-version4git)
 
@@ -12,9 +16,9 @@ add_definitions(${PROJECT_VERSION4GIT_CFLAGS})
 
 add_library(HitboxFix SHARED
         include/cssdk/public/interface.cpp
-		src/mem/handles.cpp
-		src/mem/handles.cpp
-		src/mem/patternscan.cpp
+		    src/mem/handles.cpp
+		    src/mem/handles.cpp
+		    src/mem/patternscan.cpp
         src/dllapi.cpp
         src/engine_api.cpp
         src/engine_rehlds_api.cpp

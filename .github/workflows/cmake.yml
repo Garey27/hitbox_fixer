@@ -7,14 +7,26 @@ on:
 
 jobs:
   build_linux:
-    runs-on: ubuntu-latest
-    container: s1lentq/linux86buildtools:latest
+    runs-on: ubuntu-20.04
+    container: debian:11-slim
     
     env:
       CMAKE_TOOLCHAIN_FILE: ${{github.workspace}}/cmake/linux-i686.cmake
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+          dpkg --add-architecture i386
+          apt-get update
+          apt-get install -y \
+          gcc-multilib g++-multilib \
+          build-essential \
+          libc6-dev libc6-dev-i386 \
+          git cmake rsync \
+          g++ gcc
+
     - name: Configure CMake
       # Use a bash shell so we can use the same syntax for environment variable
       # access regardless of the host operating system
@@ -22,19 +34,19 @@ jobs:
       # Note the current convention is to use the -S and -B options here to specify source 
       # and build directories, but this is only available with CMake 3.13 and higher.  
       # The CMake binaries on the Github Actions machines are (as of this writing) 3.12
-      run:  rm -rf build && CC=icc CXX=icpc cmake -B build -DCMAKE_TOOLCHAIN_FILE=cmake/linux-i686.cmake && cmake --build build -j 
+      run:  rm -rf build && CC=gcc CXX=g++ cmake -B build && cmake --build build -j 
 
     - name: Deploy artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: linux
-        path: ${{github.workspace}}/build/hitbox_fix_mm_i386.so
+        path: ${{github.workspace}}/build/bin/hitbox_fix_mm.so
           
   build_windows:
     runs-on: windows-latest
     
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     -
       name: Create Build Environment
       # Some projects don't allow in-source building, so create a separate build directory
@@ -58,10 +70,17 @@ jobs:
       run: cmake --build . --config Release --parallel
               
     - name: Deploy artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: windows
-        path: ${{github.workspace}}/build/Release/hitbox_fix_mm.dll
+        path: ${{github.workspace}}/build/bin/hitbox_fix_mm.dll
+
+    - name: Deploy artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows
+        path: ${{github.workspace}}/build/bin/hitbox_vis.dll
+
   publish:
     name: 'Publish'
     runs-on: ubuntu-latest
@@ -69,26 +88,27 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout
-        uses: actions/checkout@v2        
+        uses: actions/checkout@v4        
       - name: Set env
         run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
       - name: Deploying linux artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: linux
 
       - name: Deploying windows artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: windows
       
       - name: Archive artifacts
         run: |
-          mkdir -p addons/hitbox_fix
-          cp dist/hbf.cfg hitbox_fix_mm.dll hitbox_fix_mm_i386.so addons/hitbox_fix
-          7z a -tzip hitbox_fix-bin-${RELEASE_VERSION}.zip addons
+          mkdir -p amxmodx/hitboxfixer vis
+          cp hitbox_fix_mm.dll hitbox_fix_mm.so amxmodx/hitboxfixer
+          cp hitbox_vis.dll vis/hitbox_vis
+          7z a -tzip ahitbox_fix-bin-${RELEASE_VERSION}.zip amxmodx
         
       - name: Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: hitbox_fix-bin-*.zip
