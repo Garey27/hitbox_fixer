@@ -707,6 +707,7 @@ float StudioEstimateFrame(mstudioseqdesc_t* pseqdesc)
 {
 	double dfdt, f;
 
+
 	if (1)
 	{
 		if (player_params[player].m_clTime < player_params[player].animtime)
@@ -855,6 +856,7 @@ void EXT_FUNC HL_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 	byte prevcontroller[4];
 	byte controller[4];
 	vec3_t temp_angles;
+	vec3_t temp_origin;
 	if (!phf_hitbox_fix->value)
 	{
 		orig_interface.SV_StudioSetupBones(pModel, frame, sequence, angles, origin, pcontroller, pblending, iBone, pEdict);
@@ -866,8 +868,8 @@ void EXT_FUNC HL_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 		player = ENTINDEX(pEdict) - 1;
 		sequence = player_params[player].sequence;
 		frame = player_params[player].frame;
-		origin = player_params[player].final_origin;
 		temp_angles = player_params[player].final_angles;
+		temp_origin = player_params[player].origin;
 		controller[0] = player_params[player].controller[0];
 		controller[1] = player_params[player].controller[1];
 		controller[2] = player_params[player].controller[2];
@@ -1031,9 +1033,9 @@ void EXT_FUNC HL_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 	}
 	AngleMatrix(temp_angles, (*g_pRotationMatrix));
 
-	(*g_pRotationMatrix)[0][3] = origin[0];
-	(*g_pRotationMatrix)[1][3] = origin[1];
-	(*g_pRotationMatrix)[2][3] = origin[2];
+	(*g_pRotationMatrix)[0][3] = temp_origin[0];
+	(*g_pRotationMatrix)[1][3] = temp_origin[1];
+	(*g_pRotationMatrix)[2][3] = temp_origin[2];
 
 	for (i = chainlength - 1; i >= 0; i--)
 	{
@@ -1074,17 +1076,17 @@ void CS_StudioProcessParams(int player, player_anim_params_s& params)
 
 	auto pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + params.sequence;
 
-	if (player != -1)
+	
+	if (params.m_nPlayerGaitSequences != ANIM_JUMP_SEQUENCE && params.gaitsequence == ANIM_JUMP_SEQUENCE)
 	{
-		if (params.m_nPlayerGaitSequences != ANIM_JUMP_SEQUENCE && params.gaitsequence == ANIM_JUMP_SEQUENCE)
-		{
-			params.gaitframe = 0;
-		}
-
-		params.m_nPlayerGaitSequences = params.gaitsequence;
+		params.gaitframe = 0;
 	}
 
+	params.m_nPlayerGaitSequences = params.gaitsequence;
+	
+
 	params.f = StudioEstimateFrame(pseqdesc);
+
 
 	if (params.gaitsequence == ANIM_WALK_SEQUENCE)
 	{
@@ -1113,6 +1115,7 @@ void EXT_FUNC CS_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 	byte controller[4];
 	float bonematrix[3][4];
 	vec3_t temp_angles;
+	vec3_t temp_origin;
 
 	static float pos[MAXSTUDIOBONES][3];
 	static vec4_t q[MAXSTUDIOBONES];
@@ -1135,7 +1138,7 @@ void EXT_FUNC CS_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 		player = entId - 1;
 		sequence = player_params[player].sequence;
 		frame = player_params[player].frame;
-		origin = player_params[player].final_origin;
+		temp_origin = player_params[player].origin;
 		temp_angles = player_params[player].final_angles;
 		controller[0] = player_params[player].controller[0];
 		controller[1] = player_params[player].controller[1];
@@ -1406,7 +1409,7 @@ void EXT_FUNC CS_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 	{
 		player_params[player].prevframe = f;
 	}
-	if (player != -1 && sequence < ANIM_FIRST_DEATH_SEQUENCE && sequence != ANIM_SWIM_1 && sequence != ANIM_SWIM_2)
+	if (player != -1 && (sequence < ANIM_FIRST_DEATH_SEQUENCE && sequence != ANIM_SWIM_1 && sequence != ANIM_SWIM_2))
 	{
 		bool bCopy = true;
 
@@ -1440,9 +1443,9 @@ void EXT_FUNC CS_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 
 	AngleMatrix(temp_angles, (*g_pRotationMatrix));
 
-	(*g_pRotationMatrix)[0][3] = origin[0];
-	(*g_pRotationMatrix)[1][3] = origin[1];
-	(*g_pRotationMatrix)[2][3] = origin[2];
+	(*g_pRotationMatrix)[0][3] = temp_origin[0];
+	(*g_pRotationMatrix)[1][3] = temp_origin[1];
+	(*g_pRotationMatrix)[2][3] = temp_origin[2];
 
 	for (i = chainlength - 1; i >= 0; i--)
 	{

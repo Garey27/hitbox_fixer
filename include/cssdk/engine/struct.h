@@ -6,7 +6,6 @@
 #include "delta_packet.h"
 #include "server_static.h"
 #include "userid_rehlds.h"
-
 #define MAX_INFO_STRING 256
 
 typedef struct client_frame_s
@@ -97,38 +96,22 @@ struct client_t
 	int m_sendrescount;
 };
 
-struct player_anim_params_s
+struct player_ent_hist_params_s
 {
-	int playerId;
-	int sequence;
-	int gaitsequence;
-	int m_nPlayerGaitSequences;
-	
-	double f;
-	float frame;
-	float prevframe;
-	float gaitframe;
-	float gaityaw;
 	Vector origin;
 	Vector angles;
-	Vector final_origin;
-	Vector final_angles;
-	Vector m_prevgaitorigin;
-	Vector prevangles;
-	int prevsequence;
-	float sequencetime;
-	float animtime;
-	double m_clTime;
-	double m_clOldTime;
-	double framerate;
-	unsigned char prevblending[2];
-	unsigned char prevseqblending[2];
-	unsigned char prevcontroller[4];
+	int sequence;
+	int gaitsequence;
+	float frame;
 	unsigned char controller[4];
 	unsigned char blending[2];
-	float m_flGaitMovement;
-	float m_flYawModifier;
+	float sequencetime;
+	float animtime;
+	double framerate;
+	float sendTime;
 };
+
+
 typedef struct sv_adjusted_positions_s
 {
 	int active;
