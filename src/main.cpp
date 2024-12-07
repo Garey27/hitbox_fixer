@@ -469,7 +469,7 @@ void StudioEstimateGait(player_anim_params_s& params)
   }
   if (!est_velocity.x && !est_velocity.y)
   {  
-    float flYawDiff = flYaw - (double)(int)(360 * (__int64)(0.0027777778 * flYaw));
+    float flYawDiff = flYaw - (double)(int)(360 * (int64_t)(0.0027777778 * flYaw));
 
     if (flYawDiff > 180.0)
       flYawDiff -= 360.0;
@@ -496,7 +496,7 @@ void StudioEstimateGait(player_anim_params_s& params)
 
      flYawDiff *= dt;
 
-     if ((double)(int)abs((__int64)flYawDiff) < 0.1)
+     if ((double)(int)abs((int64_t)flYawDiff) < 0.1)
       flYawDiff = 0;
 
     params.gaityaw += flYawDiff;
@@ -513,155 +513,6 @@ void StudioEstimateGait(player_anim_params_s& params)
     if (params.gaityaw < -180)
       params.gaityaw = -180;
   }
-}
-
-void StudioEstimateGait2(player_anim_params_s& params)
-{
-  long double v2; // fst7
-  long double x; // fst6
-  long double v6; // fst7
-  long double v7; // fst7
-  bool v9; // al
-  bool v10; // zf
-  long double v12; // fst6
-  long double v13; // fst3
-  long double v14; // fst5
-  long double v15; // fst3
-  char v17; // c2
-  long double v18; // fst6
-  long double v19; // fst5
-  long double v20; // fst7
-  long double v21; // fst6
-  long double gaityaw; // fst7
-  long double v24; // fst6
-  long double y; // fst7
-  bool v26; // cc
-  float flYawDiff; // [esp+1Ch] [ebp-50h]
-  float v30; // [esp+20h] [ebp-4Ch]
-  float v31; // [esp+20h] [ebp-4Ch]
-  float v32; // [esp+44h] [ebp-28h]
-  float v33; // [esp+44h] [ebp-28h]
-  float flYaw; // [esp+4Ch] [ebp-20h]
-  float flYawa; // [esp+4Ch] [ebp-20h]
-  vec3_t est_velocity; // [esp+50h] [ebp-1Ch] BYREF
-
-  flYaw = params.m_clTime - params.m_clOldTime;
-  //flYaw = 0.01;
-
-  if (flYaw < 0.0)
-    goto LABEL_28;
-  if (flYaw <= 1.0)
-  {
-    if (flYaw == 0.0)
-    {
-    LABEL_28:
-      params.m_flGaitMovement = 0.0;
-      return;
-    }
-  }
-  else
-  {
-    flYaw = 1.0;
-  }
-  v2 = flYaw;
-  if (1)
-  {
-    x = params.origin[0];
-    est_velocity[0] = x - params.m_prevgaitorigin[0];
-    est_velocity[1] = params.origin[1] - params.m_prevgaitorigin[1];
-    est_velocity[2] = params.origin[2] - params.m_prevgaitorigin[2];
-    params.m_prevgaitorigin[0] = x;
-    params.m_prevgaitorigin[1] = params.origin[1];
-    params.m_prevgaitorigin[2] = params.origin[2];
-    v30 = v2;
-    v6 = est_velocity.Length();
-    params.m_flGaitMovement = v6;
-    if (v30 <= 0.0)
-    {
-      v7 = v30;
-    LABEL_7:
-      params.m_flGaitMovement = 0.0;
-      est_velocity[0] = 0.0;
-      est_velocity[1] = 0.0;
-      v9 = params.sequence > 100;
-      goto LABEL_8;
-    }
-    v26 = v6 / v30 >= 5.0;
-    v7 = v30;
-    if (!v26)
-      goto LABEL_7;
-  }
-  v9 = params.sequence > 100;
-  if (est_velocity[1] == 0.0)
-  {
-    if (est_velocity[0] == 0.0)
-    {
-    LABEL_8:
-      v10 = !v9;
-      if (v10)
-      {
-        v12 = params.angles[1] - params.gaityaw;
-        v32 = v12 / 360.0;
-        v13 = v12 - (long double)(360 * (int)v32);
-        if (v13 <= 180.0)
-          v14 = v13;
-        else
-          v14 = v13 - 360.0;
-        if (v14 < -180.0)
-          v14 = v14 + 360.0;
-        v15 = v12;
-        v15 = fmod(v15, 360.0);
-        v18 = v14;
-        flYawa = v15;
-        v19 = flYawa;
-        if (flYawa >= -180.0)
-        {
-          if (v19 > 180.0)
-            v19 = v19 - 360.0;
-        }
-        else
-        {
-          v19 = v19 + 360.0;
-        }
-        if (v19 > -5.0 && v19 < 5.0)
-          params.m_flYawModifier = 0.050000001;
-        if (v19 < -90.0 || v19 > 90.0)
-          params.m_flYawModifier = 3.5;
-        if (v7 >= 0.25)
-          v20 = v7 * v18;
-        else
-          v20 = v18 * (v7 * params.m_flYawModifier);
-        flYawDiff = v20;
-        v21 = 0.0;
-        if ((long double)(int)abs((int)flYawDiff) >= 0.1)
-          v21 = v20;
-        params.gaityaw = v21 + params.gaityaw;
-        gaityaw = params.gaityaw;
-        v33 = gaityaw / 360.0;
-        params.gaityaw = gaityaw - (long double)(360 * (int)v33);
-        goto LABEL_28;
-      }
-      goto LABEL_36;
-    }
-    y = est_velocity[1];
-  }
-  else
-  {
-    y = est_velocity[1];
-  }
-  if (params.sequence > 100)
-  {
-  LABEL_36:
-    params.gaityaw = params.gaityaw + params.angles[1] - params.gaityaw;
-    return;
-  }
-  params.gaityaw = atan2(y, est_velocity[0]) * 180.0 / 3.141592653589793;
-  if (params.gaityaw > 180.0)
-  {
-    params.gaityaw = 180.0;
-  }
-  if (params.gaityaw < -180.0)
-    params.gaityaw = -180.0;
 }
 
 void StudioPlayerBlend(int* pBlend, float* pPitch)

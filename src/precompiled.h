@@ -16,6 +16,7 @@
 #include <deque>
 #include <thread>
 #include <chrono>
+#include <unordered_map>
 #include <extdll.h>
 #include <cbase.h>
 
