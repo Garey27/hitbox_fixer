@@ -39,6 +39,9 @@
 #include "handles.h"
 #include "patternscan.h"
 
+#include "utlbuffer.h"
+#include "lz4.h"
+#include "shared/shared.h"
 #include "struct.h"
 #include "api.h"
 #undef DLLEXPORT
@@ -59,6 +62,8 @@ extern void (PlayerPostThinkPost)(edict_t* pEntity);
 extern void (UpdateClientDataPost) (const struct edict_s* ent, int sendweapons, struct clientdata_s* cd);
 extern int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict_t* host, int hostflags, int player, unsigned char* pSet);
 extern void (PutInServer)	(edict_t* pEntity);
+extern void (StartFramePost)();
+extern void CvarValue2_PreHook(const edict_t* pEnt, int requestID, const char* cvarName, const char* cvarValue);
 extern sv_blending_interface_s orig_interface;
 extern cvar_t* phf_hitbox_fix;
 void UTIL_ServerPrint(const char* fmt, ...);

@@ -868,7 +868,7 @@ void EXT_FUNC HL_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 		player = ENTINDEX(pEdict) - 1;
 		sequence = player_params[player].sequence;
 		frame = player_params[player].frame;
-		temp_angles = player_params[player].angles;
+		temp_angles = player_params[player].final_angles;
 		temp_origin = player_params[player].origin;
 		controller[0] = player_params[player].controller[0];
 		controller[1] = player_params[player].controller[1];
@@ -1139,7 +1139,7 @@ void EXT_FUNC CS_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 		sequence = player_params[player].sequence;
 		frame = player_params[player].frame;
 		temp_origin = player_params[player].origin;
-		temp_angles = player_params[player].angles;
+		temp_angles = player_params[player].final_angles;
 		controller[0] = player_params[player].controller[0];
 		controller[1] = player_params[player].controller[1];
 		controller[2] = player_params[player].controller[2];
@@ -1409,7 +1409,7 @@ void EXT_FUNC CS_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 	{
 		player_params[player].prevframe = f;
 	}
-	if (player != -1 && sequence < ANIM_FIRST_DEATH_SEQUENCE && sequence != ANIM_SWIM_1 && sequence != ANIM_SWIM_2)
+	if (player != -1 && (sequence < ANIM_FIRST_DEATH_SEQUENCE && sequence != ANIM_SWIM_1 && sequence != ANIM_SWIM_2))
 	{
 		bool bCopy = true;
 
