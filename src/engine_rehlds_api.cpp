@@ -26,16 +26,23 @@ bool RehldsApi_Init()
 	char failReason[2048];
 
 #ifdef WIN32
-	CSysModule* engineModule = Sys_LoadModule("swds.dll");
-	if (!RehldsApi_TryInit(engineModule, failReason))
+	// Find the most appropriate module handle from a list of DLL candidates
+	// Notes:
+	// - "swds.dll" is the library Dedicated Server
+	//
+	//    Let's also attempt to locate the ReHLDS API in the client's library
+	// - "sw.dll" is the client library for Software render, with a built-in listenserver
+	// - "hw.dll" is the client library for Hardware render, with a built-in listenserver
+	const char *dllNames[] = { "swds.dll", "sw.dll", "hw.dll" }; // List of DLL candidates to lookup for the ReHLDS API
+	CSysModule *engineModule = NULL; // The module handle of the selected DLL
+	for (const char *dllName : dllNames)
 	{
-		engineModule = Sys_LoadModule("filesystem_stdio.dll");
-		if (!RehldsApi_TryInit(engineModule, failReason))return false;
+		if (engineModule = Sys_GetModuleHandle(dllName))
+			break; // gotcha
 	}
 #else
-	CSysModule* engineModule = Sys_LoadModule("engine_i486.so");
-	if (!RehldsApi_TryInit(engineModule, failReason))return false;
+	CSysModule* engineModule = Sys_GetModuleHandle("engine_i486.so");
 #endif
 
-	return true;
+	return RehldsApi_TryInit(engineModule, failReason);
 }

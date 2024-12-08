@@ -51,12 +51,6 @@ struct rehlds_api : players_api
 {
 	bool Init() override
 	{
-#ifdef _WIN32
-		if (GetModuleHandleA("hw.dll"))
-		{
-			return false;
-		}
-#endif
 		// todo check for linux hw.so (LAN)
 		return RehldsApi_Init();
 	}
