@@ -1180,7 +1180,7 @@ void *CDynPatcher::HookFunctionCall(void *OrigAddr, void *NewAddr)
     for (uint32_t ref : CallRefs) {
 #ifndef _WIN32
         Dl_info RefInfo;
-        if (!dladdr(ref, &RefInfo)) {
+        if (!dladdr(reinterpret_cast<const void*>(ref), &RefInfo)) {
             memset(&RefInfo, 0, sizeof(RefInfo));
         }
         DynMsg("Call %i to 0x%p(%s) at %x(%s)\n",
@@ -1217,7 +1217,7 @@ void *CDynPatcher::HookFunctionCall(void *OrigAddr, void *NewAddr)
     for (uint32_t ref : JmpRefs) {
 #ifndef _WIN32
         Dl_info RefInfo;
-        if (!dladdr(ref, &RefInfo)) {
+        if (!dladdr(reinterpret_cast<const void*>(ref), &RefInfo)) {
             memset(&RefInfo, 0, sizeof(RefInfo));
         }
         DynMsg("Jmp %i to 0x%p(%s) at %x(%s)\n",
@@ -1712,11 +1712,7 @@ inline T GetVFunc(N* inst)
 }
 
 
-uintptr_t ScanPattern(uintptr_t start,
-  uintptr_t end,
-  uintptr_t length,
-  uintptr_t* data,
-  uintptr_t* mask);
+
 struct pOperation {
   short op;
   intptr_t offset, v1;

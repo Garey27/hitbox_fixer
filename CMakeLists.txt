@@ -76,7 +76,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 else()
     target_compile_options(HitboxFix PRIVATE 
         -std=c++20
-        -Wno-reserved-user-defined-literal
+        -Wno-conversion-null
         -Wno-format
         -Wno-write-strings
         -fpermissive
@@ -90,10 +90,11 @@ else()
         LINK_FLAGS "-m32"
         POSITION_INDEPENDENT_CODE ON
     )
-    target_compile_options(LZ4 PRIVATE -m32)
+    target_compile_options(LZ4 PRIVATE -m32 -fPIC)
     target_link_options(LZ4 PRIVATE -m32)
-    target_compile_options(subhook PRIVATE -m32)
+    target_compile_options(subhook PRIVATE -m32 -fPIC)
     target_link_options(subhook PRIVATE -m32)
+    target_link_libraries(HitboxFix PRIVATE -static-libstdc++ -static-libgcc)
 endif()
 
 target_link_libraries(HitboxFix PRIVATE subhook LZ4)

@@ -8,8 +8,9 @@
 #include <vector>
 #include <string>
 #include <cassert>
-#ifdef POSIX
-#    include <elf.h>
+#ifndef WIN32
+#include <elf.h>
+#include <dlfcn.h> 
 #endif
 
 // class FindRef_Mov;
@@ -150,7 +151,7 @@ public:
 #ifdef WIN32
 
 #else
-        auto csym = dlsym(DLHandler, sName);
+        auto csym = (::dlsym)(this->DLHandler, sName);
 #endif
         if (!csym) {
 #ifndef WIN32
