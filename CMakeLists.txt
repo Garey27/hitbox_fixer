@@ -9,7 +9,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 include(cmake-version4git)
 
 PROJECT_VERSION_FROM_GIT()
-add_compile_definitions(${PROJECT_VERSION4GIT_CFLAGS})
+add_definitions(${PROJECT_VERSION4GIT_CFLAGS})
 
 add_library(HitboxFix SHARED
     include/cssdk/public/interface.cpp
@@ -78,7 +78,7 @@ else()
         -std=c++20
         -Wno-reserved-user-defined-literal
         -Wno-format
-        -Wno-writable-strings
+        -Wno-write-strings
         -fpermissive
         -D_vsnprintf=vsnprintf
         -m32
