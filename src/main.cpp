@@ -732,9 +732,7 @@ void HL_StudioProcessGait(player_anim_params_s& params)
 
   pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + params.sequence;
 
-
   HL_StudioPlayerBlend(pseqdesc, &iBlend, &params.angles[0]);
-
   params.blending[0] = iBlend;
   params.prevblending[0] = params.blending[0];
   params.prevseqblending[0] = params.blending[0];
@@ -913,12 +911,14 @@ void UpdateClientAnimParams(int id, int host_id, player_anim_params_s& params, f
   }
   else
   {
+
     if (params.gaitsequence)
     {
       vec3_t save = params.angles;
       HL_StudioProcessGait(params);
+      params.angles[0] = -params.angles[0];
       params.final_angles = params.angles;
-      params.final_angles[0] = -params.final_angles[0];
+      params.angles = save;
     }
     else
     {
@@ -1166,7 +1166,8 @@ void (SendDebugInfo)(size_t player_index)
       {
         nofind = 0;
       }
-      CS_StudioSetupBones(
+
+      (*orig_ppinterface)->SV_StudioSetupBones(
         model,
         dst_plr->edict->v.frame,
         dst_plr->edict->v.sequence,

@@ -143,6 +143,7 @@ struct CStudioModelRendererHook :public CGameStudioModelRenderer
 		else
 		{
 			auto model = g_pStudio->GetModelByIndex(m_pCurrentEntity->curstate.modelindex);
+
 			if (model)
 			{
 				studiohdr_t* extra = (studiohdr_t*)g_pStudio->Mod_Extradata(model);
@@ -590,6 +591,13 @@ void init_patchers()
 	g_StudioRenderer = decltype(g_StudioRenderer)(ao.FindPatternIDA(
 		"client.dll",
 		"B9 *? ? ? ? E9 ? ? ? ? 90 90 90 90 90 90 83 7C 24 04 ?"));
+
+	if (!g_StudioRenderer)
+	{
+		g_StudioRenderer = decltype(g_StudioRenderer)(ao.FindPatternIDA(
+			"client.dll",
+			"C7 06 *?? ?? ?? ?? 8B C6 5E C3"));
+	}
 
 	cl_parsefuncs = decltype(cl_parsefuncs)(
 		(ao.FindPatternIDA("hw.dll", "BF *? ? ? ? 8B 04 B5 ? ? ? ?")) - 0x4);
