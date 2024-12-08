@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(HitboxFix)
+project(HitboxFix VERSION 1.0 LANGUAGES CXX)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -9,116 +9,102 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 include(cmake-version4git)
 
 PROJECT_VERSION_FROM_GIT()
-add_definitions(${PROJECT_VERSION4GIT_CFLAGS})
-
+add_compile_definitions(${PROJECT_VERSION4GIT_CFLAGS})
 
 add_library(HitboxFix SHARED
-        include/cssdk/public/interface.cpp
-        src/dllapi.cpp
-        src/engine_api.cpp
-        src/engine_rehlds_api.cpp
-        src/h_export.cpp
-        src/main.cpp
-        src/meta_api.cpp
-        src/mod_regamedll_api.cpp
-        src/sdk_util.cpp 
-        src/animation.cpp
-        include/cssdk/public/utlbuffer.cpp
+    include/cssdk/public/interface.cpp
+    src/dllapi.cpp
+    src/engine_api.cpp
+    src/engine_rehlds_api.cpp
+    src/h_export.cpp
+    src/main.cpp
+    src/meta_api.cpp
+    src/mod_regamedll_api.cpp
+    src/sdk_util.cpp 
+    src/animation.cpp
+    include/cssdk/public/utlbuffer.cpp
     "${CMAKE_SOURCE_DIR}/utils/CDynPatcher.cpp"
     "${CMAKE_SOURCE_DIR}/utils/CSectionData.cpp"
-        
-        
-         "include/shared/shared.h")
+    "include/shared/shared.h"
+)
 
-        
-target_include_directories(HitboxFix PRIVATE include)
-target_include_directories(HitboxFix PRIVATE include/cssdk/common)
-target_include_directories(HitboxFix PRIVATE include/cssdk/dlls)
-target_include_directories(HitboxFix PRIVATE include/cssdk/dlls/API)
-target_include_directories(HitboxFix PRIVATE include/cssdk/dlls/bot)
-target_include_directories(HitboxFix PRIVATE include/cssdk/dlls/hostage)
-target_include_directories(HitboxFix PRIVATE include/cssdk/engine)
-target_include_directories(HitboxFix PRIVATE include/cssdk/game_shared)
-target_include_directories(HitboxFix PRIVATE include/cssdk/game_shared/bot)
-target_include_directories(HitboxFix PRIVATE include/cssdk/pm_shared)
-target_include_directories(HitboxFix PRIVATE include/cssdk/public)
-target_include_directories(HitboxFix PRIVATE include/cssdk/public/cl_dll)
-target_include_directories(HitboxFix PRIVATE include/cssdk/public/HLTV)
-target_include_directories(HitboxFix PRIVATE include/cssdk/public/steam)
-target_include_directories(HitboxFix PRIVATE include/cssdk/public/tier0)
-target_include_directories(HitboxFix PRIVATE include/cssdk/public/vgui)
-target_include_directories(HitboxFix PRIVATE include/metamod)
-target_include_directories(HitboxFix PRIVATE src)
-target_include_directories(HitboxFix PRIVATE "${CMAKE_SOURCE_DIR}/utils")
-target_include_directories(HitboxFix PRIVATE dep/subhook)
-target_include_directories(HitboxFix PRIVATE dep/lz4)
+target_include_directories(HitboxFix PRIVATE 
+    include
+    include/cssdk/common
+    include/cssdk/dlls
+    include/cssdk/dlls/API
+    include/cssdk/dlls/bot
+    include/cssdk/dlls/hostage
+    include/cssdk/engine
+    include/cssdk/game_shared
+    include/cssdk/game_shared/bot
+    include/cssdk/pm_shared
+    include/cssdk/public
+    include/cssdk/public/cl_dll
+    include/cssdk/public/HLTV
+    include/cssdk/public/steam
+    include/cssdk/public/tier0
+    include/cssdk/public/vgui
+    include/metamod
+    src
+    "${CMAKE_SOURCE_DIR}/utils"
+    dep/subhook
+    dep/lz4
+)
 
-set(SUBHOOK_STATIC "" ON )
-set(SUBHOOK_TESTS  "" OFF )
-
+set(SUBHOOK_STATIC ON)
+set(SUBHOOK_TESTS OFF)
 
 add_subdirectory(dep/subhook) 
 add_subdirectory(dep/lz4)
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")#-fvisibility=hidden -s -ffunction-sections -fdata-sections -fpermissive -Wno-write-strings -Wno-int-to-pointer-cast -Wno-unused-result -Wno-multichar 
-   
-    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    add_compile_definitions(-D_CRT_SECURE_NO_WARNINGS)
     target_link_options(HitboxFix PRIVATE /EXPORT:GiveFnptrsToDll=_GiveFnptrsToDll@8 /SECTION:.data,RW)
     target_compile_options(HitboxFix PRIVATE 
-   /std:c++20
-    /ZI
-    #/arch:AVX2 
-    /Zc:strictStrings-
-    #/EHsc   
-    #/GR- 
+        /std:c++20
+        /ZI
+        /Zc:strictStrings-
     )
     set_target_properties(subhook PROPERTIES
-        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" # static linking
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
     )
-
     set_target_properties(HitboxFix PROPERTIES
-        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" # static linking
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
     )
-    
-    
-target_link_libraries(HitboxFix PRIVATE psapi.lib dbghelp.lib Ws2_32.lib)
+    target_link_libraries(HitboxFix PRIVATE psapi.lib dbghelp.lib Ws2_32.lib)
 else()
-     set(CMAKE_CXX_FLAGS         "${CMAKE_CXX_FLAGS} -std=c++14 -Wno-reserved-user-defined-literal -Wno-format -Wno-writable-strings -fpermissive -D_vsnprintf=vsnprintf")
-    set(CMAKE_CXX_FLAGS_DEBUG   "-O0 -g3 -shared")
-    set(CMAKE_CXX_FLAGS_RELEASE "-Os -shared -s ")
-    set(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -shared -s")
-    set(CMAKE_CXX_STANDARD 20)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -m32")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}  -static-libstdc++ -static-libgcc")
-    target_compile_features(HitboxFix PUBLIC cxx_std_20)
-    set_target_properties(HitboxFix PROPERTIES COMPILE_FLAGS "-m32" LINK_FLAGS "-m32" POSITION_INDEPENDENT_CODE ON)
-    target_compile_options(HitboxFix PRIVATE -m32)
+    target_compile_options(HitboxFix PRIVATE 
+        -std=c++20
+        -Wno-reserved-user-defined-literal
+        -Wno-format
+        -Wno-writable-strings
+        -fpermissive
+        -D_vsnprintf=vsnprintf
+        -m32
+    )
     target_link_options(HitboxFix PRIVATE -m32)
+    target_compile_features(HitboxFix PUBLIC cxx_std_20)
+    set_target_properties(HitboxFix PROPERTIES 
+        COMPILE_FLAGS "-m32"
+        LINK_FLAGS "-m32"
+        POSITION_INDEPENDENT_CODE ON
+    )
     target_compile_options(LZ4 PRIVATE -m32)
     target_link_options(LZ4 PRIVATE -m32)
     target_compile_options(subhook PRIVATE -m32)
     target_link_options(subhook PRIVATE -m32)
-
 endif()
 
-
 target_link_libraries(HitboxFix PRIVATE subhook LZ4)
-
 set_target_properties(HitboxFix PROPERTIES PREFIX "")
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-
-set_target_properties(LZ4 PROPERTIES
-    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" # static linking
-)
-
-
-add_subdirectory(vis)
-
-set_target_properties(HitboxFix PROPERTIES OUTPUT_NAME "hitbox_fix_mm")
+    set_target_properties(LZ4 PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    )
+    add_subdirectory(vis)
+    set_target_properties(HitboxFix PROPERTIES OUTPUT_NAME "hitbox_fix_mm")
 else()
-set_target_properties(HitboxFix PROPERTIES OUTPUT_NAME "hitbox_fix_mm_i386")
+    set_target_properties(HitboxFix PROPERTIES OUTPUT_NAME "hitbox_fix_mm_i386")
 endif()
-
-

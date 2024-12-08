@@ -121,7 +121,8 @@ void MSG_WriteAngleAsDelta(float baseAngle, float newAngle, int numbits, uint32_
 
 class AnimProcessor
 {
-  std::deque<std::pair<uint32_t, player_ent_hist_params_s>> history[32];
+  static inline constexpr size_t k_MaxHistory = 64;
+  std::array<std::array<std::pair<uint32_t, player_ent_hist_params_s>, k_MaxHistory>, 32> history;
 public:
   bool can_debug = false;
   player_anim_params_s processed_params[32];
@@ -130,7 +131,6 @@ public:
   void add_history(int id, uint32_t out_seq, entity_state_t* state)
   {
     player_ent_hist_params_s params;
-    params.sendTime = gpGlobals->time;
     params.sequence = state->sequence;
     params.gaitsequence = state->gaitsequence;
     params.frame = uint32_t(state->frame);
@@ -153,7 +153,7 @@ public:
     params.blending[0] = state->blending[0];
     params.blending[1] = state->blending[1];
 
-    history[id].push_back({ out_seq, params });
+    history[id][out_seq % k_MaxHistory] = { out_seq, params };
   }
   bool process_anims(int id, uint32_t recv_seq, double lerp, double frametime, player_anim_params_s& params)
   {
@@ -162,46 +162,58 @@ public:
       //params.m_clOldTime = params.m_clTime;
       //params.m_clTime += frametime;
     }
-
-    auto size = history[id].size();
-    if (!size)
-      return false;
-
     auto processed = false;
-    auto to_lerp = std::prev(history[id].end());
-    for (auto hist = history[id].begin(); hist != history[id].end(); hist++)
-    {      
-      if (hist->first >= recv_seq)
+    player_ent_hist_params_s* to_lerp = nullptr;
+    size_t end = (recv_seq - 1) % k_MaxHistory;
+    for (size_t i = (recv_seq + 1) % k_MaxHistory; i != end; i = (i + 1) % k_MaxHistory)
+    {
+      auto& [seq, hist] = history[id][i];
+
+      if (seq >= recv_seq)
       {
-        to_lerp = hist;
+        to_lerp = &hist;
         break;
       }
     }
-    auto target_time = to_lerp->second.animtime - lerp;
-    auto max_lerp_time = to_lerp->second.animtime - 0.1 - (frametime*2);
-    auto from_lerp = history[id].end();
-    auto max_lerp = history[id].begin();
-
-    for (auto hist = history[id].begin(); hist != history[id].end(); hist++)
+    float target_time = -1;
+    if (to_lerp)
     {
+      target_time = to_lerp->animtime - lerp;
+    }
+    player_ent_hist_params_s* from_lerp = nullptr;
+    player_ent_hist_params_s* max_lerp = nullptr;
+
+    for (size_t i = (recv_seq + 1) % k_MaxHistory; i != end; i = (i + 1) % k_MaxHistory)
+    {
+      auto& [seq, hist] = history[id][i];
+
+      if ((hist.animtime) <= target_time)
+      {
+        from_lerp = &hist;
+      }
+
+      if (seq < recv_seq)
+      {
+        continue;
+      }
       processed = true;
-      params.sequence = hist->second.sequence ;
-      params.gaitsequence = hist->second.gaitsequence;
-      params.frame = uint32_t(hist->second.frame);
+      params.sequence = hist.sequence ;
+      params.gaitsequence = hist.gaitsequence;
+      params.frame = uint32_t(hist.frame);
 
-      params.origin.x = hist->second.origin.x;
-      params.origin.y = hist->second.origin.y;
-      params.origin.z = hist->second.origin.z;
+      params.origin.x = hist.origin.x;
+      params.origin.y = hist.origin.y;
+      params.origin.z = hist.origin.z;
 
-      params.angles.x = hist->second.angles.x;
-      params.angles.y = hist->second.angles.y;
-      params.angles.z = hist->second.angles.z;
+      params.angles.x = hist.angles.x;
+      params.angles.y = hist.angles.y;
+      params.angles.z = hist.angles.z;
 
       params.m_clOldTime = params.m_clTime;
-      params.m_clTime = hist->second.animtime + frametime;
+      params.m_clTime = hist.animtime + frametime;
 
-      params.animtime = hist->second.animtime;
-      params.framerate = hist->second.framerate;
+      params.animtime = hist.animtime;
+      params.framerate = hist.framerate;
 
       if (params.sequence < 0)
         params.sequence = 0;
@@ -220,7 +232,7 @@ public:
       // copy controllers
       for (int i = 0; i < 4; i++)
       {
-        if (hist->second.controller[i] != params.controller[i])
+        if (hist.controller[i] != params.controller[i])
           params.prevcontroller[i] = params.controller[i];
       }
 
@@ -228,51 +240,31 @@ public:
       for (int i = 0; i < 2; i++)
         params.prevblending[i] = params.blending[i];
 
-      params.controller[0] = hist->second.controller[0];
-      params.controller[1] = hist->second.controller[1];
-      params.controller[2] = hist->second.controller[2];
-      params.controller[3] = hist->second.controller[3];
-      params.blending[0] = hist->second.blending[0];
-      params.blending[1] = hist->second.blending[1];
-      if ((hist->second.animtime) <= max_lerp_time)
-      {
-        max_lerp = hist;
-      }
-      if ((hist->second.animtime) <= target_time)
-      {
-        from_lerp = hist;
-      }
-      if (hist->first >= recv_seq)
-      {
-        break;
-      }
+      params.controller[0] = hist.controller[0];
+      params.controller[1] = hist.controller[1];
+      params.controller[2] = hist.controller[2];
+      params.controller[3] = hist.controller[3];
+      params.blending[0] = hist.blending[0];
+      params.blending[1] = hist.blending[1];
+      break;
     }
-    if (from_lerp != history[id].end())
+    if (from_lerp != nullptr && to_lerp != nullptr)
     {
-      float from_time = from_lerp->second.animtime;
-      float to_time = to_lerp->second.animtime;
+      float from_time = from_lerp->animtime;
+      float to_time = to_lerp->animtime;
       float frac = 0.0;
       vec3_t delta;
-      VectorSubtract(from_lerp->second.origin, to_lerp->second.origin, delta);
+      VectorSubtract(from_lerp->origin, to_lerp->origin, delta);
 
 #define bound( min, num, max )	((num) >= (min) ? ((num) < (max) ? (num) : (max)) : (min))
       if (from_time != to_time)
         frac = bound(0.0, (to_time - target_time) / (to_time - from_time), 1.2);
 
 
-      VectorMA(to_lerp->second.origin, frac, delta, params.origin);
-      InterpolateAngles(to_lerp->second.angles, from_lerp->second.angles, params.angles, frac);
+      VectorMA(to_lerp->origin, frac, delta, params.origin);
+      InterpolateAngles(to_lerp->angles, from_lerp->angles, params.angles, frac);
     }
-    if (recv_seq != last_proccesed_seq)
-    {
-      history[id].erase(history[id].begin(), max_lerp);
-    }
-    /*
-    while (!history[id].empty() && history[id].front().second.animtime < (target_time))
-    {
-      history[id].pop_front();
-    }
-    */
+
     return processed;
   }
 

@@ -108,7 +108,6 @@ struct player_ent_hist_params_s
 	float sequencetime;
 	float animtime;
 	double framerate;
-	float sendTime;
 };
 
 
