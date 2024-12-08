@@ -37,11 +37,11 @@ bool RehldsApi_Init()
 	CSysModule *engineModule = NULL; // The module handle of the selected DLL
 	for (const char *dllName : dllNames)
 	{
-		if (engineModule = (CSysModule*)GetModuleHandle(dllName))
+		if (engineModule = Sys_GetModuleHandle(dllName))
 			break; // gotcha
 	}
 #else
-	CSysModule* engineModule = (CSysModule*)GetModuleHandle("engine_i486.so");
+	CSysModule* engineModule = Sys_GetModuleHandle("engine_i486.so");
 #endif
 
 	return RehldsApi_TryInit(engineModule, failReason);
