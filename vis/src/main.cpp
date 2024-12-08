@@ -137,8 +137,21 @@ struct CStudioModelRendererHook :public CGameStudioModelRenderer
 		vec3_t tmp;
 		vec3_t p[8];
 		vec3_t pos;
-
-		mstudiobbox_t* pbbox = (mstudiobbox_t*)((char*)m_pStudioHeader + m_pStudioHeader->hitboxindex);
+		mstudiobbox_t* pbbox;
+		if(!is_server) 
+			pbbox = (mstudiobbox_t*)((char*)m_pStudioHeader + m_pStudioHeader->hitboxindex);
+		else
+		{
+			auto model = g_pStudio->GetModelByIndex(m_pCurrentEntity->curstate.modelindex);
+			if (model)
+			{
+				studiohdr_t* extra = (studiohdr_t*)g_pStudio->Mod_Extradata(model);
+				if (extra)
+				{
+					pbbox = (mstudiobbox_t*)((char*)extra + extra->hitboxindex);
+				}
+			}
+		}
 		oEngine.pTriAPI->SpriteTexture(m_pWhiteSprite, 0);
 		oEngine.pTriAPI->RenderMode(kRenderTransAlpha);
 		for (i = 0; i < m_pStudioHeader->numhitboxes; i++)
