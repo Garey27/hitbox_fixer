@@ -6,7 +6,8 @@
 #undef min
 #undef max
 #include <vector>
-
+#include <string>
+#include <cassert>
 #ifdef POSIX
 #    include <elf.h>
 #endif
@@ -24,6 +25,10 @@ typedef void **VTable_t;
 
 class CDynPatcher : private CBaseNotification {
 public:
+    struct Pattern {
+      std::string pattern;
+      std::string mask;
+    };
     CDynPatcher();
     ~CDynPatcher();
 
@@ -48,6 +53,11 @@ public:
                                        const std::vector<uint32_t> &RefVec);
     std::vector<uint32_t> FindRef_Jmp(uint32_t StartAddr,
                                       const std::vector<uint32_t> &RefVec);
+
+    uintptr_t FindPatternIDA(const std::string& pattern, uintptr_t start = 0) const;
+
+
+
     uint32_t GetCallFromAddress(uint32_t StartAddr);
     uint32_t FindNearestCall(uint32_t StartAddr, uint32_t Size);
     uint32_t FindFuntionStart(uint32_t StartAddr, uint32_t Size);
@@ -135,12 +145,12 @@ public:
         auto GetProcAdr = [this](const char *Sym) -> FARPROC {
             return GetProcAddress(reinterpret_cast<HMODULE>(DllBase), Sym);
         };
-#endif
         auto csym = GetProcAdr(sName);
+#endif
 #ifdef WIN32
 
 #else
-        dlsym(DLHandler, sName);
+        auto csym = dlsym(DLHandler, sName);
 #endif
         if (!csym) {
 #ifndef WIN32
@@ -238,7 +248,7 @@ public:
 private:
     iBool bSelfLoaded;
     void *DllBase;
-#ifdef POSIX
+#ifndef WIN32
     void *DLHandler;  // for dlopen storage
 #endif
 

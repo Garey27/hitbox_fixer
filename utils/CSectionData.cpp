@@ -141,7 +141,7 @@ void CBaseNotification::SpewMsg(const char *File,
     static char Buff[0x1000];
     int len = 0;
 
-    len += _snprintf(&Buff[len],
+    len += snprintf(&Buff[len],
                      sizeof(Buff) - len - 1,
                      "[%s:%s](%s[%s:%i]):",
                      szClassName ? szClassName : "---",
@@ -152,9 +152,9 @@ void CBaseNotification::SpewMsg(const char *File,
 
     va_list marker;
     if (Fmt) {
-        len += _snprintf(&Buff[len], sizeof(Buff) - len - 1, ":");
+        len += snprintf(&Buff[len], sizeof(Buff) - len - 1, ":");
         va_start(marker, Fmt);
-        len += _vsnprintf(&Buff[len], sizeof(Buff) - len - 1, Fmt, marker);
+        len += vsnprintf(&Buff[len], sizeof(Buff) - len - 1, Fmt, marker);
         va_end(marker);
     }
 #ifdef USE_METAMOD
@@ -181,7 +181,7 @@ void CBaseNotification::SpewMsg(const char *File,
     }
     if (!OutputOk) {
 #endif
-        len += _snprintf(&Buff[len], sizeof(Buff) - len - 1, "\r\n");
+        len += snprintf(&Buff[len], sizeof(Buff) - len - 1, "\r\n");
         if (PrintFunc) {
             PrintFunc(Buff);
         }

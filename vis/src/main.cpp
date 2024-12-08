@@ -8,7 +8,7 @@
 #include "clientdll/clientdll.hpp"
 #include "engine/engine.hpp"
 #include <rehlds/common/triangleapi.h>
-#include <utils/CDynPatcher.h>
+#include <CDynPatcher.h>
 #include <utils/patch.hpp>
 #include <gl/GL.h>
 #include <array>

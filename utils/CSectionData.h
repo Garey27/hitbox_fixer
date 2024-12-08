@@ -55,7 +55,7 @@ private:
 class CDynPatcher;
 
 class CSectionData : private CBaseNotification {
-private:
+public:
     class CSectionInfo : private CBaseNotification {
     public:
         CSectionInfo(uint32_t rStart,
@@ -243,7 +243,6 @@ private:
             return FoundAddr;
         }
 
-    private:
         uint32_t Start;
         uint32_t Size;
         union {

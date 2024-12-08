@@ -14,7 +14,6 @@ cvar_t hf_debug = { "hbf_debug", "0", FCVAR_SERVER | FCVAR_PROTECTED, 0.0f, NULL
 cvar_t* phf_debug;
 cvar_t* phf_hitbox_fix;
 
-int gmsgDebug = 0;
 
 char g_ExecConfigCmd[MAX_PATH];
 std::unique_ptr<players_api> api;
@@ -1073,42 +1072,6 @@ FARPROC WINAPI GetProcAddressHooked(
 }
 #endif
 
-void NetadrToSockadr(const netadr_t* a, struct sockaddr* s)
-{
-  memset(s, 0, sizeof(*s));
-
-  auto s_in = (sockaddr_in*)s;
-
-  switch (a->type)
-  {
-  case NA_BROADCAST:
-    s_in->sin_family = AF_INET;
-    s_in->sin_addr.s_addr = INADDR_BROADCAST;
-    s_in->sin_port = a->port;
-    break;
-  case NA_IP:
-    s_in->sin_family = AF_INET;
-    s_in->sin_addr.s_addr = *(int*)&a->ip;
-    s_in->sin_port = a->port;
-    break;
-#ifdef _WIN32
-  case NA_IPX:
-    s->sa_family = AF_IPX;
-    memcpy(s->sa_data, a->ipx, 10);
-    *(unsigned short*)&s->sa_data[10] = a->port;
-    break;
-  case NA_BROADCAST_IPX:
-    s->sa_family = AF_IPX;
-    memset(&s->sa_data, 0, 4);
-    memset(&s->sa_data[4], 255, 6);
-    *(unsigned short*)&s->sa_data[10] = a->port;
-    break;
-#endif // _WIN32
-  default:
-    break;
-  }
-}
-
 void COM_Munge2(unsigned char* data, int len, int seq)
 {
   static const unsigned char mungify_table2[] =
@@ -1151,12 +1114,7 @@ void StartFramePost()
   if (!phf_debug->value)
     RETURN_META(MRES_IGNORED);
 
-  if (!gmsgDebug)
-  {
-    RETURN_META(MRES_IGNORED);
-  }
-
-  for (int i = 0; i < gpGlobals->maxClients; i++)
+  for (int i = 0; i < api->GetMaxClients(); i++)
   {
     SendDebugInfo(i);
   }
@@ -1183,7 +1141,7 @@ void (SendDebugInfo)(size_t player_index)
   CUtlBuffer buffer;
   // 1st version
   buffer.PutChar(0x1);
-  for (int i = 0; i < gpGlobals->maxClients; i++)
+  for (int i = 0; i < api->GetMaxClients(); i++)
   {
     if (i == player_index)
       continue;
@@ -1232,10 +1190,6 @@ void (SendDebugInfo)(size_t player_index)
   std::vector<char> output(worst_size);
   size_t output_size = LZ4_compress_fast(static_cast<const char*>(buffer.Base()), output.data(), buffer.TellPut(), worst_size, 1);
 
-  auto sock = api->GetSocket(host_plr->netchan.sock);
-  struct sockaddr addr;
-  NetadrToSockadr(&host_plr->netchan.remote_address, &addr);
-
   buffer.SeekPut(CUtlBuffer::SEEK_HEAD, 0);
   uint32_t w1 = host_plr->netchan.outgoing_sequence;
   uint32_t w2 = host_plr->netchan.incoming_sequence - 1;
@@ -1249,17 +1203,11 @@ void (SendDebugInfo)(size_t player_index)
   uint32_t seq = *(uint32_t*)(buffer.Base());
   COM_Munge2(reinterpret_cast<unsigned char*>(buffer.Base()) + 8, buffer.TellPut() - 8, seq & 0xff);
   //buffer.PutChar(0);
-
-  sendto((SOCKET)sock, static_cast<const char*>(buffer.Base()), buffer.TellPut(), 0, &addr, sizeof(addr));
+  api->SendPacket(buffer.TellPut(), buffer.Base(), host_plr->netchan);
   host_plr->netchan.outgoing_sequence++;
 }
 void C_ServerActivate(edict_t* pEdictList, int edictCount, int clientMax)
 {
-  if (gmsgDebug)
-    RETURN_META(MRES_IGNORED);
-
-  gmsgDebug = g_engfuncs.pfnRegUserMsg("HitboxDebug", -1);
-
   RETURN_META(MRES_IGNORED);
 }
 
@@ -1359,12 +1307,14 @@ bool OnMetaAttach()
     return false;
   }
 
+  CDynPatcher game_p;
+
 #if defined(__linux__) || defined(__APPLE__)
-
-
-  ModuleInfo info = Handles::GetModuleInfo(linux_game_library.c_str());
-  Server_GetBlendingInterfaceOrig = decltype(Server_GetBlendingInterfaceOrig)(dlsym(info.handle, "Server_GetBlendingInterface"));
-  if (Server_GetBlendingInterfaceOrig)
+  game_p.Init(linux_game_library.c_str());
+#else 
+  game_p.Init(game_library.c_str());
+#endif
+  if (game_p.FindSymbol("Server_GetBlendingInterface", &Server_GetBlendingInterfaceOrig))
   {
     Server_GetBlendingInterfaceHook = subhook_new(
       (void*)Server_GetBlendingInterfaceOrig, (void*)Server_GetBlendingInterface, (subhook_flags_t)0);
@@ -1372,27 +1322,16 @@ bool OnMetaAttach()
   }
   else
   {
+#if defined(__linux__) || defined(__APPLE__)
     dlsymHook = subhook_new(
       (void*)dlsym, (void*)dlsym_hook, (subhook_flags_t)0);
     subhook_install(dlsymHook);
-  }
-
 #else
-  Server_GetBlendingInterfaceOrig = decltype(Server_GetBlendingInterfaceOrig)(GetProcAddress((HMODULE)GetModuleHandleA(game_library.c_str()), "Server_GetBlendingInterface"));
-  if (Server_GetBlendingInterfaceOrig)
-  {
-    Server_GetBlendingInterfaceHook = subhook_new(
-      (void*)Server_GetBlendingInterfaceOrig, (void*)Server_GetBlendingInterface, (subhook_flags_t)0);
-    subhook_install(Server_GetBlendingInterfaceHook);
-  }
-  else
-  {
-
     GetProcAddressHook = subhook_new(
       (void*)GetProcAddress, (void*)GetProcAddressHooked, (subhook_flags_t)0);
     subhook_install(GetProcAddressHook);
-  }
 #endif
+  }
   Init = true;
   return true;
 }

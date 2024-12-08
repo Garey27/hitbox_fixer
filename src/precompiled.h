@@ -37,8 +37,7 @@
 #include <rehlds_api.h>
 #include "engine_rehlds_api.h"
 #include "main.h"
-#include "handles.h"
-#include "patternscan.h"
+#include <CDynPatcher.h>
 
 #include "utlbuffer.h"
 #include "lz4.h"

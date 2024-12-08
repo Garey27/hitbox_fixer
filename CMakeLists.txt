@@ -14,9 +14,6 @@ add_definitions(${PROJECT_VERSION4GIT_CFLAGS})
 
 add_library(HitboxFix SHARED
         include/cssdk/public/interface.cpp
-		    src/mem/handles.cpp
-		    src/mem/handles.cpp
-		    src/mem/patternscan.cpp
         src/dllapi.cpp
         src/engine_api.cpp
         src/engine_rehlds_api.cpp
@@ -27,6 +24,8 @@ add_library(HitboxFix SHARED
         src/sdk_util.cpp 
         src/animation.cpp
         include/cssdk/public/utlbuffer.cpp
+    "${CMAKE_SOURCE_DIR}/utils/CDynPatcher.cpp"
+    "${CMAKE_SOURCE_DIR}/utils/CSectionData.cpp"
         
         
          "include/shared/shared.h")
@@ -50,9 +49,10 @@ target_include_directories(HitboxFix PRIVATE include/cssdk/public/tier0)
 target_include_directories(HitboxFix PRIVATE include/cssdk/public/vgui)
 target_include_directories(HitboxFix PRIVATE include/metamod)
 target_include_directories(HitboxFix PRIVATE src)
-target_include_directories(HitboxFix PRIVATE src/mem)
+target_include_directories(HitboxFix PRIVATE "${CMAKE_SOURCE_DIR}/utils")
 target_include_directories(HitboxFix PRIVATE dep/subhook)
 target_include_directories(HitboxFix PRIVATE dep/lz4)
+
 set(SUBHOOK_STATIC "" ON )
 set(SUBHOOK_TESTS  "" OFF )
 
@@ -91,6 +91,7 @@ else()
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -m32")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}  -static-libstdc++ -static-libgcc")
+    target_compile_features(HitboxFix PUBLIC cxx_std_20)
     set_target_properties(HitboxFix PROPERTIES COMPILE_FLAGS "-m32" LINK_FLAGS "-m32" POSITION_INDEPENDENT_CODE ON)
     target_compile_options(HitboxFix PRIVATE -m32)
     target_link_options(HitboxFix PRIVATE -m32)

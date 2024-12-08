@@ -15,6 +15,7 @@ function(default_target_properties TARGET)
         "${CMAKE_CURRENT_SOURCE_DIR}/dep/rehlds/rehlds/common"
         "${CMAKE_CURRENT_SOURCE_DIR}/dep/rehlds/rehlds/public/rehlds"
 	    "${CMAKE_CURRENT_SOURCE_DIR}/dep/soxr/src"
+      "${CMAKE_SOURCE_DIR}/utils/"
     )
     set_target_properties("${TARGET}" PROPERTIES
         CXX_STANDARD 20
@@ -28,8 +29,8 @@ set(HITBOXFIX_SOURCES
     "src/utils/ntdll.h"
     "src/utils/memory.hpp"
     "src/utils/memory.cpp"
-    "src/utils/CDynPatcher.cpp"
-    "src/utils/CSectionData.cpp"
+    "${CMAKE_SOURCE_DIR}/utils/CDynPatcher.cpp"
+    "${CMAKE_SOURCE_DIR}/utils/CSectionData.cpp"
     "src/utils/win32exception.hpp"
     "src/utils/win32exception.cpp"
     "src/auto_offset/auto_offset.hpp"
