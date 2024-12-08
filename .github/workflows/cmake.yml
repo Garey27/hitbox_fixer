@@ -99,8 +99,9 @@ jobs:
           cp hitbox_fix_mm.dll hitbox_fix_mm_i386.so amxmodx/hitboxfixer
           cp hitbox_vis.dll vis/hitbox_vis.asi
           7z a -tzip hitbox_fix-bin-${RELEASE_VERSION}.zip amxmodx vis
-           - name: Generate release tag
-      - id: tag
+
+      - name: Generate release tag
+        id: tag
         run: |
           echo "::set-output name=release_tag::Nightly_$(date +"%Y.%m.%d_%H-%M")"
 
