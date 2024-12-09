@@ -6,7 +6,6 @@ jobs:
     runs-on: ubuntu-20.04
     container:
       image: debian:11-slim
-      options: --volume=${{ github.workspace }}:/workspace
 
     steps:
     - name: Install dependencies
@@ -16,33 +15,38 @@ jobs:
           git gcc-multilib g++-multilib \
           build-essential libc6-dev libc6-dev-i386 \
           cmake rsync
-
-    - name: Check git version
-      run: git --version
-
+          
     - uses: actions/checkout@v4
       with:
-        path: /workspace
+        submodules: 'true'
 
-    - name: Debug workspace
-      run: ls -la /workspace
-
-    - name: Create Build Dir
-      run: mkdir -p /workspace/build
-
+    -
+      name: Create Build Environment
+      # Some projects don't allow in-source building, so create a separate build directory
+      # We'll use this as our working directory for all subsequent commands
+      run: cmake -E make_directory ${{github.workspace}}/build
+      
     - name: Configure CMake
-      working-directory: /workspace/build
+      # Use a bash shell so we can use the same syntax for environment variable
+      # access regardless of the host operating system
+      shell: bash
+      working-directory: ${{github.workspace}}/build
+      # Note the current convention is to use the -S and -B options here to specify source 
+      # and build directories, but this is only available with CMake 3.13 and higher.  
+      # The CMake binaries on the Github Actions machines are (as of this writing) 3.12
       run: cmake .. -DCMAKE_BUILD_TYPE=Release
 
     - name: Build
-      working-directory: /workspace/build
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      # Execute the build.  You can specify a specific target with "--target <NAME>"
       run: cmake --build . --config Release --parallel
-
+      
     - name: Deploy artifacts
       uses: actions/upload-artifact@v4
       with:
         name: linux
-        path: /workspace/build/bin/hitbox_fix_mm_i386.so
+        path: ${{github.workspace}}/build/bin/hitbox_fix_mm_i386.so
           
   build_windows:
     runs-on: windows-latest
