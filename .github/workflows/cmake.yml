@@ -1,54 +1,48 @@
 name: CMake
 
 on: [push]
-
 jobs:
   build_linux:
     runs-on: ubuntu-20.04
-    container: debian:11-slim
-    
-    env:
-      CMAKE_TOOLCHAIN_FILE: ./cmake/linux-i686.cmake
-      
-    steps:
-    - uses: actions/checkout@v4
+    container:
+      image: debian:11-slim
+      options: --volume=${{ github.workspace }}:/workspace
 
-    - name: Debug Workspace
-      run: |
-        ls -la ${{github.workspace}}
-        
+    steps:
     - name: Install dependencies
       run: |
-          dpkg --add-architecture i386
-          apt-get update
-          apt-get install -y \
-          gcc-multilib g++-multilib \
-          build-essential \
-          libc6-dev libc6-dev-i386 \
-          git cmake
+        apt-get update
+        apt-get install -y \
+          git gcc-multilib g++-multilib \
+          build-essential libc6-dev libc6-dev-i386 \
+          cmake rsync
+
+    - name: Check git version
+      run: git --version
+
+    - uses: actions/checkout@v4
+      with:
+        path: /workspace
+
+    - name: Debug workspace
+      run: ls -la /workspace
 
     - name: Create Build Dir
-      run: |
-        mkdir -p build
-        
+      run: mkdir -p /workspace/build
+
     - name: Configure CMake
-      working-directory: ./build
-      # Note the current convention is to use the -S and -B options here to specify source 
-      # and build directories, but this is only available with CMake 3.13 and higher.  
-      # The CMake binaries on the Github Actions machines are (as of this writing) 3.12
+      working-directory: /workspace/build
       run: cmake .. -DCMAKE_BUILD_TYPE=Release
-      
-        
+
     - name: Build
-      working-directory: ./build
-      # Execute the build.  You can specify a specific target with "--target <NAME>"
+      working-directory: /workspace/build
       run: cmake --build . --config Release --parallel
 
     - name: Deploy artifacts
       uses: actions/upload-artifact@v4
       with:
         name: linux
-        path: ./build/bin/hitbox_fix_mm_i386.so
+        path: /workspace/build/bin/hitbox_fix_mm_i386.so
           
   build_windows:
     runs-on: windows-latest
