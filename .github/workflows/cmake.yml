@@ -6,6 +6,7 @@ jobs:
     runs-on: ubuntu-22.04
     container:
       image: debian:11-slim
+      options: --user root
 
     steps:
     - name: Install dependencies
