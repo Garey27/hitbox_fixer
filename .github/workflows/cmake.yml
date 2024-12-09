@@ -32,7 +32,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: linux
-        path: /work/build/bin/hitbox_fix_mm_i386.so
+        path: ${{github.workspace}}/build/bin/hitbox_fix_mm_i386.so
           
   build_windows:
     runs-on: windows-latest
