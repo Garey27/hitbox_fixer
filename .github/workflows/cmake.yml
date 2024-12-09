@@ -6,9 +6,6 @@ jobs:
     runs-on: ubuntu-22.04
     container:
       image: debian:11-slim
-    defaults:
-      run:
-        working-directory: /
 
     steps:
     - name: Install dependencies
@@ -25,9 +22,10 @@ jobs:
 
     -
       name: Create Build Environment
+      working-directory: ${{github.workspace}}
       # Some projects don't allow in-source building, so create a separate build directory
       # We'll use this as our working directory for all subsequent commands
-      run: cmake -E make_directory ${{github.workspace}}/build
+      run: cmake -E make_directory ./build
       
     - name: Configure CMake
       # Use a bash shell so we can use the same syntax for environment variable
