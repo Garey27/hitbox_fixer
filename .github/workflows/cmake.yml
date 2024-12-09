@@ -12,24 +12,20 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y \
-          git gcc-multilib g++-multilib \
-          build-essential libc6-dev libc6-dev-i386 \
-          cmake rsync
+        apt-get install -y  git gcc-multilib g++-multilib ninja-build cmake
           
     - uses: actions/checkout@v4      
+
     - name: Configure CMake
       # Use a bash shell so we can use the same syntax for environment variable
       # access regardless of the host operating system
       shell: bash
-      working-directory: ${{github.workspace}}
       # Note the current convention is to use the -S and -B options here to specify source 
       # and build directories, but this is only available with CMake 3.13 and higher.  
       # The CMake binaries on the Github Actions machines are (as of this writing) 3.12
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
     - name: Build
-      working-directory: ${{github.workspace}}
       shell: bash
       # Execute the build.  You can specify a specific target with "--target <NAME>"
       run: cmake --build build --config Release --parallel
@@ -38,7 +34,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: linux
-        path: ${{github.workspace}}/build/bin/hitbox_fix_mm_i386.so
+        path: /work/build/bin/hitbox_fix_mm_i386.so
           
   build_windows:
     runs-on: windows-latest
