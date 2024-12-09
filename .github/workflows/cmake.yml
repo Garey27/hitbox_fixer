@@ -8,11 +8,15 @@ jobs:
     container: debian:11-slim
     
     env:
-      CMAKE_TOOLCHAIN_FILE: ${{github.workspace}}/cmake/linux-i686.cmake
-
+      CMAKE_TOOLCHAIN_FILE: ./cmake/linux-i686.cmake
+      
     steps:
     - uses: actions/checkout@v4
 
+    - name: Debug Workspace
+      run: |
+        ls -la ${{github.workspace}}
+        
     - name: Install dependencies
       run: |
           dpkg --add-architecture i386
@@ -21,15 +25,14 @@ jobs:
           gcc-multilib g++-multilib \
           build-essential \
           libc6-dev libc6-dev-i386 \
-          git cmake rsync \
-          g++ gcc
+          git cmake
 
     - name: Create Build Dir
       run: |
-        mkdir -p ${{github.workspace}}/build
+        mkdir -p build
         
     - name: Configure CMake
-      working-directory: ${{github.workspace}}/build
+      working-directory: ./build
       # Note the current convention is to use the -S and -B options here to specify source 
       # and build directories, but this is only available with CMake 3.13 and higher.  
       # The CMake binaries on the Github Actions machines are (as of this writing) 3.12
@@ -37,7 +40,7 @@ jobs:
       
         
     - name: Build
-      working-directory: ${{github.workspace}}/build
+      working-directory: ./build
       # Execute the build.  You can specify a specific target with "--target <NAME>"
       run: cmake --build . --config Release --parallel
 
@@ -45,7 +48,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: linux
-        path: ${{github.workspace}}/build/bin/hitbox_fix_mm_i386.so
+        path: ./build/bin/hitbox_fix_mm_i386.so
           
   build_windows:
     runs-on: windows-latest
