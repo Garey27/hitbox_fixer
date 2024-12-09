@@ -6,7 +6,6 @@ jobs:
     runs-on: ubuntu-22.04
     container:
       image: debian:11-slim
-      options: --user 1001 # Run as non-root user
 
     steps:
     - name: Install dependencies
@@ -15,6 +14,7 @@ jobs:
         apt-get install -y  git gcc-multilib g++-multilib ninja-build cmake
           
     - uses: actions/checkout@v4      
+      run: git config --system --add safe.directory '*' # Workaround for github actions with custom container
 
     - name: Configure CMake
       # Use a bash shell so we can use the same syntax for environment variable
