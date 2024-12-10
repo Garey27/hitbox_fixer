@@ -41,8 +41,6 @@ struct pOperation
 		case 24:
 		case 28:
 			return GetAbsoluteAddress<int32_t>(addr, offset, v1);
-		default:
-			printf("INVALID OPPPP!\n");
 		}
 		return addr;
 	}
