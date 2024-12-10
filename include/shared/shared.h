@@ -31,8 +31,10 @@ public:
 	unsigned char blending[2];
 	float m_flGaitMovement;
 	float m_flYawModifier;
+	size_t last_num_bones;
+	float (last_bone_transform)[MAXSTUDIOBONES][3][4];
 
-	void pack_params(size_t player_index, CUtlBuffer& buffer, float (*bone_transform)[MAXSTUDIOBONES][3][4], size_t num_bones)
+	void pack_params(size_t player_index, CUtlBuffer& buffer)
 	{
 		buffer.PutUnsignedChar(player_index);
 
@@ -44,10 +46,10 @@ public:
 		buffer.PutFloat(m_flGaitMovement);
 		buffer.PutFloat(m_clTime);
 		buffer.PutFloat(m_clOldTime);
-		buffer.PutUnsignedInt(num_bones);
-		if (num_bones)
+		buffer.PutUnsignedInt(last_num_bones);
+		if (last_num_bones)
 		{
-			buffer.Put(bone_transform, sizeof(float[3][4]) * num_bones);
+			buffer.Put(last_bone_transform, sizeof(float[3][4]) * last_num_bones);
 		}
 
 	}

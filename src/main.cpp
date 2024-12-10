@@ -353,19 +353,24 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
   vec3_t mins;
   vec3_t maxs;
 
-  nofind = 1;
+  nofind = 0;
   if (_host_client->fakeclient)
     RETURN_META(MRES_IGNORED);
-
-  if (!MDLL_AllowLagCompensation() || sv_unlag->value == 0.0f || !_host_client->lw || !_host_client->lc)
-  {
-    RETURN_META(MRES_IGNORED);
-  }
 
   if (api->GetMaxClients() <= 1 || !_host_client->active)
     RETURN_META(MRES_IGNORED);
 
-  nofind = 0;
+  if (!MDLL_AllowLagCompensation() || sv_unlag->value == 0.0f || !_host_client->lw || !_host_client->lc)
+  {
+    nofind = 1;
+  }
+  else
+  {
+    nofind = 0;
+  }
+
+
+  auto can_debug = PlayerAnimProcessor[host_id].can_debug;
 
   size_t frame_index = SV_UPDATE_MASK & (_host_client->netchan.incoming_acknowledged);
   frame = &_host_client->frames[frame_index];
@@ -406,11 +411,29 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
       continue;
     auto client_id = state->number - 1;
 
-
-    PlayerAnimProcessor[host_id].process_anims(client_id, _host_client->netchan.outgoing_sequence, _host_client->netchan.incoming_acknowledged, cl_interptime, dt, PlayerAnimProcessor[host_id].processed_params[client_id]);
-    UpdateClientAnimParams(client_id, host_id, PlayerAnimProcessor[host_id].processed_params[client_id], dt);
-    player_params[client_id] = PlayerAnimProcessor[host_id].processed_params[client_id];
-
+    if (!nofind)
+    {
+      PlayerAnimProcessor[host_id].process_anims(client_id, _host_client->netchan.outgoing_sequence, _host_client->netchan.incoming_acknowledged, cl_interptime, dt, PlayerAnimProcessor[host_id].processed_params[client_id]);
+      UpdateClientAnimParams(client_id, host_id, PlayerAnimProcessor[host_id].processed_params[client_id], dt);
+      player_params[client_id] = PlayerAnimProcessor[host_id].processed_params[client_id];
+    }
+    if (can_debug && phf_debug->value == 2)
+    {
+      auto model = api->GetModel(cl->edict->v.modelindex);
+      auto pstudiohdr = (studiohdr_t*)IEngineStudio.Mod_Extradata(model);
+      (*orig_ppinterface)->SV_StudioSetupBones(
+        model,
+        cl->edict->v.frame,
+        cl->edict->v.sequence,
+        cl->edict->v.angles,
+        cl->edict->v.origin,
+        cl->edict->v.controller,
+        cl->edict->v.blending,
+        -1,
+        cl->edict);
+      PlayerAnimProcessor[host_id].processed_params[client_id].last_num_bones = pstudiohdr->numbones;
+      memcpy(PlayerAnimProcessor[host_id].processed_params[client_id].last_bone_transform, g_pBoneTransform, pstudiohdr->numbones * sizeof(float[3][4]));
+    }
 
   }
   PlayerAnimProcessor[host_id].lastTimeReceived = _host_client->netchan.last_received;
@@ -1175,7 +1198,7 @@ void (SendDebugInfo)(size_t player_index)
       auto pstudiohdr = (studiohdr_t*)IEngineStudio.Mod_Extradata(model);
       numbones = pstudiohdr->numbones;
     }
-    player_params[player_index].pack_params(i, buffer, g_pBoneTransform, numbones);
+    player_params[player_index].pack_params(i, buffer);
   }
   // End of players loop
   buffer.PutUnsignedChar(0xff);
