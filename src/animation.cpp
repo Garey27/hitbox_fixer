@@ -855,7 +855,8 @@ void EXT_FUNC HL_StudioSetupBones(model_t* pModel, float frame, int sequence, co
 	byte prevcontroller[4];
 	byte controller[4];
 	vec3_t temp_angles;
-	if (!phf_hitbox_fix->value)
+	
+	if (!phf_hitbox_fix->value || nofind)
 	{
 		orig_interface.SV_StudioSetupBones(pModel, frame, sequence, angles, origin, pcontroller, pblending, iBone, pEdict);
 		return;
