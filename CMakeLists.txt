@@ -14,7 +14,6 @@ add_definitions(${PROJECT_VERSION4GIT_CFLAGS})
 add_library(HitboxFix SHARED
     include/cssdk/public/interface.cpp
     src/mem/handles.cpp
-    src/mem/handles.cpp
     src/mem/patternscan.cpp
     src/dllapi.cpp
     src/engine_api.cpp
@@ -45,6 +44,7 @@ target_include_directories(HitboxFix PRIVATE
     include/cssdk/public/tier0
     include/cssdk/public/vgui
     include/metamod
+    src/mem
     src
     dep/subhook
 )
