@@ -155,7 +155,7 @@ public:
 
     history[id][out_seq % k_MaxHistory] = { out_seq, params };
   }
-  bool process_anims(int id, uint32_t recv_seq, double lerp, double frametime, player_anim_params_s& params)
+  bool process_anims(int id, uint32_t last_out, uint32_t recv_seq, double lerp, double frametime, player_anim_params_s& params)
   {
     if (recv_seq == last_proccesed_seq)
     {
@@ -164,8 +164,8 @@ public:
     }
     auto processed = false;
     player_ent_hist_params_s* to_lerp = nullptr;
-    size_t end = (recv_seq - 1) % k_MaxHistory;
-    for (size_t i = (recv_seq + 1) % k_MaxHistory; i != end; i = (i + 1) % k_MaxHistory)
+    size_t end = (last_out) % k_MaxHistory;
+    for (size_t i = (last_out + 1) % k_MaxHistory; i != end; i = (i + 1) % k_MaxHistory)
     {
       auto& [seq, hist] = history[id][i];
 
@@ -183,13 +183,14 @@ public:
     player_ent_hist_params_s* from_lerp = nullptr;
     player_ent_hist_params_s* max_lerp = nullptr;
 
-    for (size_t i = (recv_seq + 1) % k_MaxHistory; i != end; i = (i + 1) % k_MaxHistory)
+    for (size_t i = (last_out + 1) % k_MaxHistory; i != end; i = (i + 1) % k_MaxHistory)
     {
       auto& [seq, hist] = history[id][i];
 
       if ((hist.animtime) <= target_time)
       {
-        from_lerp = &hist;
+        if (!from_lerp || hist.animtime > from_lerp->animtime)
+          from_lerp = &hist;
       }
 
       if (seq < recv_seq)
@@ -406,7 +407,7 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
     auto client_id = state->number - 1;
 
 
-    PlayerAnimProcessor[host_id].process_anims(client_id, _host_client->netchan.incoming_acknowledged, cl_interptime, dt, PlayerAnimProcessor[host_id].processed_params[client_id]);
+    PlayerAnimProcessor[host_id].process_anims(client_id, _host_client->netchan.outgoing_sequence, _host_client->netchan.incoming_acknowledged, cl_interptime, dt, PlayerAnimProcessor[host_id].processed_params[client_id]);
     UpdateClientAnimParams(client_id, host_id, PlayerAnimProcessor[host_id].processed_params[client_id], dt);
     player_params[client_id] = PlayerAnimProcessor[host_id].processed_params[client_id];
 

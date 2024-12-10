@@ -28,6 +28,10 @@
 std::unordered_map<std::string, std::unique_ptr<CDynPatcher>> patchers;
 std::vector<std::unique_ptr<IPatch>> patches;
 
+
+
+client_static_t* cls;
+
 vgui::ISurface* g_pISurface = nullptr;
 
 typedef void (*pfnEngineMessage)();
@@ -68,6 +72,7 @@ struct extra_player_info
 	player_anim_params_s client_anim_params;
 	player_anim_params_s server_anim_params;
 	size_t num_bones;
+	float(bone_transform_client)[64][128][3][4];
 	float(bone_transform)[128][3][4];
 } extra_info[32];
 
@@ -414,8 +419,9 @@ struct CStudioModelRendererHook :public CGameStudioModelRenderer
 			extra_info[m_nPlayerIndex].client_anim_params.angles[0] = this->m_pCurrentEntity->curstate.angles[0];
 			extra_info[m_nPlayerIndex].client_anim_params.angles[1] = this->m_pCurrentEntity->curstate.angles[1];
 			extra_info[m_nPlayerIndex].client_anim_params.angles[2] = this->m_pCurrentEntity->curstate.angles[2];
-			StudioDrawHulls(m_pbonetransform);
+			StudioDrawHulls(&(extra_info[m_nPlayerIndex].bone_transform_client[cls->netchan.incoming_acknowledged & 63]), false);
 			StudioDrawHulls(&(extra_info[m_nPlayerIndex].bone_transform), true);
+			memcpy(&extra_info[m_nPlayerIndex].bone_transform_client[cls->netchan.outgoing_sequence & 63], m_pbonetransform, sizeof(float[128][3][4]));
 		}
 	}
 };
@@ -587,6 +593,9 @@ void init_patchers()
 		"E8 ? ? ? ? 83 C4 ? E8 ? ? ? ? 5D");
 
 
+	auto cls_signon = ao.FindPatternIDA("hw.dll", "A1 *? ? ? ? 83 C4 08 48");
+
+	cls = (client_static_t*)(cls_signon - offsetof(client_static_t, signon));
 
 	g_StudioRenderer = decltype(g_StudioRenderer)(ao.FindPatternIDA(
 		"client.dll",
