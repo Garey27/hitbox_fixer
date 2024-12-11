@@ -95,7 +95,7 @@ float MSG_ReadAngleFromDelta(float baseAngle, int numbits, uint32_t& bitstream, 
   int deltaBits = MSG_ReadBits(numbits, bitstream, bitPos);
   float deltaAngle = deltaBits * (360.0f / (1 << numbits));
 
-  // Восстановить итоговый угол
+  // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ
   float resultAngle = baseAngle + deltaAngle;
 
   if (resultAngle >= 360.0f)
@@ -432,7 +432,7 @@ void (PlayerPreThinkPre)(edict_t* pEntity)
         -1,
         cl->edict);
       PlayerAnimProcessor[host_id].processed_params[client_id].last_num_bones = pstudiohdr->numbones;
-      memcpy(PlayerAnimProcessor[host_id].processed_params[client_id].last_bone_transform, g_pBoneTransform, pstudiohdr->numbones * sizeof(float[3][4]));
+      memcpy(&(PlayerAnimProcessor[host_id].processed_params[client_id].last_bone_transform), g_pBoneTransform, pstudiohdr->numbones * sizeof(float[3][4]));
     }
 
   }
