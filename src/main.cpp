@@ -1135,6 +1135,7 @@ void StartFramePost()
     SendDebugInfo(i);
   }
 
+  RETURN_META(MRES_IGNORED);
 }
 void (SendDebugInfo)(size_t player_index)
 {
