@@ -11,8 +11,8 @@ bool RehldsApi_TryInit(CSysModule* engineModule, char* failureReason) {
 	int retCode = 0;
 	g_RehldsApi = (IRehldsApi*)ifaceFactory(VREHLDS_HLDS_API_VERSION, &retCode);
 	if (!g_RehldsApi)return false;
-	int majorVersion = g_RehldsApi->GetMajorVersion();
-	int minorVersion = g_RehldsApi->GetMinorVersion();
+	const int majorVersion = g_RehldsApi->GetMajorVersion();
+	const int minorVersion = g_RehldsApi->GetMinorVersion();
 	if (majorVersion != REHLDS_API_VERSION_MAJOR)return false;
 	if (minorVersion < REHLDS_API_VERSION_MINOR)return false;
 	g_RehldsHookchains = g_RehldsApi->GetHookchains();

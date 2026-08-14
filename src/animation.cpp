@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "precompiled.h"
 #define PITCH 0	// up/down
 #define YAW   1 // left/right
@@ -362,54 +364,51 @@ mstudioanim_t* LookupAnimation(model_t* model, mstudioseqdesc_t* pseqdesc, int i
 
 void StudioCalcBoneAdj(float dadt, float* adj, const byte* pcontroller1, const byte* pcontroller2, byte mouthopen)
 {
-	int i, j;
 	float value;
 	mstudiobonecontroller_t* pbonecontroller;
 
 	pbonecontroller = (mstudiobonecontroller_t*)((byte*)g_pstudiohdr + g_pstudiohdr->bonecontrollerindex);
 
-	for (j = 0; j < g_pstudiohdr->numbonecontrollers; j++)
+	for (int j = 0; j < g_pstudiohdr->numbonecontrollers; j++)
 	{
-		i = pbonecontroller[j].index;
+		const int i = pbonecontroller[j].index;
 		if (i <= 3)
 		{
 			// check for 360% wrapping
 			if (pbonecontroller[j].type & STUDIO_RLOOP)
 			{
-				if (abs(pcontroller1[i] - pcontroller2[i]) > 128)
+				if (std::abs(pcontroller1[i] - pcontroller2[i]) > 128)
 				{
-					int a, b;
-					a = (pcontroller1[j] + 128) % 256;
-					b = (pcontroller2[j] + 128) % 256;
-					value = ((a * dadt) + (b * (1 - dadt)) - 128) * (360.0 / 256.0) + pbonecontroller[j].start;
+					int a = (pcontroller1[j] + 128) % 256;
+					int b = (pcontroller2[j] + 128) % 256;
+					value = ((a * dadt) + (b * (1 - dadt)) - 128) * (360.0f / 256.0f) + pbonecontroller[j].start;
 				}
 				else
 				{
-					value = (pcontroller1[i] * dadt + (pcontroller2[i]) * (1.0 - dadt)) * (360.0 / 256.0) + pbonecontroller[j].start;
+					value = (pcontroller1[i] * dadt + (pcontroller2[i]) * (1.0f - dadt)) * (360.0f / 256.0f) + pbonecontroller[j].start;
 				}
 			}
 			else
 			{
-				value = (pcontroller1[i] * dadt + pcontroller2[i] * (1.0 - dadt)) / 255.0;
+				value = (pcontroller1[i] * dadt + pcontroller2[i] * (1.0f - dadt)) / 255.0f;
 				value = clamp(value, 0.0f, 1.0f);
-				value = (1.0 - value) * pbonecontroller[j].start + value * pbonecontroller[j].end;
+				value = (1.0f - value) * pbonecontroller[j].start + value * pbonecontroller[j].end;
 			}
 		}
 		else
 		{
-			value = mouthopen / 64.0;
+			value = mouthopen / 64.0f;
 
-			if (value > 1.0)
-				value = 1.0;
+			value = std::min<float>(value, 1.0f);
 
-			value = (1.0 - value) * pbonecontroller[j].start + value * pbonecontroller[j].end;
+			value = (1.0f - value) * pbonecontroller[j].start + value * pbonecontroller[j].end;
 		}
 		switch (pbonecontroller[j].type & STUDIO_TYPES)
 		{
 		case STUDIO_XR:
 		case STUDIO_YR:
 		case STUDIO_ZR:
-			adj[j] = value * (M_PI / 180.0);
+			adj[j] = value * (M_PI / 180.0f);
 			break;
 		case STUDIO_X:
 		case STUDIO_Y:
@@ -729,7 +728,7 @@ float StudioEstimateFrame(mstudioseqdesc_t* pseqdesc)
 	}
 	else
 	{
-		f = (player_params[player].frame * (pseqdesc->numframes - 1)) / 256.0;
+		f = (player_params[player].frame * (pseqdesc->numframes - 1)) / 256.0f;
 	}
 
 	f += dfdt;
@@ -738,7 +737,7 @@ float StudioEstimateFrame(mstudioseqdesc_t* pseqdesc)
 	{
 		if (pseqdesc->numframes > 1)
 		{
-			f -= (int)(f / (pseqdesc->numframes - 1)) * (pseqdesc->numframes - 1);
+			f -= static_cast<int>(f / (pseqdesc->numframes - 1)) * (pseqdesc->numframes - 1);
 		}
 
 		if (f < 0)
@@ -748,15 +747,9 @@ float StudioEstimateFrame(mstudioseqdesc_t* pseqdesc)
 	}
 	else
 	{
-		if (f >= pseqdesc->numframes - 1.001)
-		{
-			f = pseqdesc->numframes - 1.001;
-		}
+		f = std::min(f, pseqdesc->numframes - 1.001);
 
-		if (f < 0.0)
-		{
-			f = 0.0;
-		}
+		f = std::max(f, 0.0);
 	}
 
 	return f;
@@ -808,9 +801,8 @@ float HL_StudioEstimateFrame(mstudioseqdesc_t* pseqdesc)
 	}
 	else
 	{
-		if (f >= pseqdesc->numframes - 1.001)
-			f = pseqdesc->numframes - 1.001;
-		if (f < 0.0)  f = 0.0;
+		f = std::min(f, pseqdesc->numframes - 1.001);
+		f = std::max(f, 0.0);
 	}
 	return f;
 }
@@ -827,7 +819,7 @@ float HL_StudioEstimateInterpolant()
 	if ((player_params[player].m_clTime >= player_params[player].m_clOldTime + 0.01f))
 	{
 		dadt = (player_params[player].m_clTime - player_params[player].m_clOldTime) / 0.1f;
-		if (dadt > 2.0f) dadt = 2.0f;
+		dadt = std::min(dadt, 2.0f);
 	}
 
 	return dadt;
@@ -1067,13 +1059,12 @@ void CS_StudioProcessParams(int player, player_anim_params_s& params)
 		return;
 	}
 	// Bound sequence number
-	if (params.sequence < 0)
-		params.sequence = 0;
+	params.sequence = std::max(params.sequence, 0);
 
 	if (params.sequence >= g_pstudiohdr->numseq)
 		return;
 
-	auto pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + params.sequence;
+	const auto pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + params.sequence;
 
 	if (player != -1)
 	{
