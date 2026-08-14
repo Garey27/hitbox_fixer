@@ -40,7 +40,7 @@ enum AUTH_IDTYPE
 
 typedef struct USERID_s
 {
-	int idtype;
 	uint64 m_SteamID;
+	int idtype;
 	unsigned int clientip;
 } USERID_t;

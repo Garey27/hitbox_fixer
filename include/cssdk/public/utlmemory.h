@@ -55,8 +55,8 @@ public:
 		Iterator_t(I i) : m_index(i) {}
 		I m_index;
 
-		bool operator==(const Iterator_t it) const { return m_index == it.m_index; }
-		bool operator!=(const Iterator_t it) const { return m_index != it.m_index; }
+		bool operator==(const Iterator_t &it) const { return m_index == it.m_index; }
+		bool operator!=(const Iterator_t &it) const { return m_index != it.m_index; }
 	};
 
 	Iterator_t First() const							{ return Iterator_t(IsIdxValid(0) ? 0 : InvalidIndex()); }

@@ -87,7 +87,7 @@ int FindTransition(void* pmodel, int iEndingAnim, int iGoalAnim, int* piDir)
 		return iGoalAnim;
 	}
 
-	mstudioseqdesc_t* pseqdesc = (mstudioseqdesc_t*)((byte*)pstudiohdr + pstudiohdr->seqindex);
+	const mstudioseqdesc_t* pseqdesc = (mstudioseqdesc_t*)((byte*)pstudiohdr + pstudiohdr->seqindex);
 
 	// bail if we're going to or from a node 0
 	if (pseqdesc[iEndingAnim].entrynode == 0 || pseqdesc[iGoalAnim].entrynode == 0)
@@ -112,9 +112,9 @@ int FindTransition(void* pmodel, int iEndingAnim, int iGoalAnim, int* piDir)
 		return iGoalAnim;
 	}
 
-	byte* pTransition = ((byte*)pstudiohdr + pstudiohdr->transitionindex);
+	const byte* pTransition = ((byte*)pstudiohdr + pstudiohdr->transitionindex);
 
-	int iInternNode = pTransition[(iEndNode - 1) * pstudiohdr->numtransitions + (pseqdesc[iGoalAnim].entrynode - 1)];
+	const int iInternNode = pTransition[(iEndNode - 1) * pstudiohdr->numtransitions + (pseqdesc[iGoalAnim].entrynode - 1)];
 
 	if (iInternNode == 0)
 	{
@@ -156,14 +156,14 @@ void SetBodygroup(void* pmodel, entvars_t* pev, int iGroup, int iValue)
 		return;
 	}
 
-	mstudiobodyparts_t* pbodypart = (mstudiobodyparts_t*)((byte*)pstudiohdr + pstudiohdr->bodypartindex) + iGroup;
+	const mstudiobodyparts_t* pbodypart = (mstudiobodyparts_t*)((byte*)pstudiohdr + pstudiohdr->bodypartindex) + iGroup;
 
 	if (iValue >= pbodypart->nummodels)
 	{
 		return;
 	}
 
-	int iCurrent = (pev->body / pbodypart->base) % pbodypart->nummodels;
+	const int iCurrent = (pev->body / pbodypart->base) % pbodypart->nummodels;
 	pev->body += (iValue - iCurrent) * pbodypart->base;
 }
 
@@ -176,12 +176,12 @@ int GetBodygroup(void* pmodel, entvars_t* pev, int iGroup)
 		return 0;
 	}
 
-	mstudiobodyparts_t* pbodypart = (mstudiobodyparts_t*)((byte*)pstudiohdr + pstudiohdr->bodypartindex) + iGroup;
+	const mstudiobodyparts_t* pbodypart = (mstudiobodyparts_t*)((byte*)pstudiohdr + pstudiohdr->bodypartindex) + iGroup;
 
 	if (pbodypart->nummodels <= 1)
 		return 0;
 
-	int iCurrent = (pev->body / pbodypart->base) % pbodypart->nummodels;
+	const int iCurrent = (pev->body / pbodypart->base) % pbodypart->nummodels;
 	return iCurrent;
 }
 
@@ -272,16 +272,16 @@ void QuaternionSlerp(vec_t* p, vec_t* q, float t, vec_t* qt)
 	}
 
 	float sclp, sclq;
-	real_t cosom = (p[0] * q[0] + p[1] * q[1] + p[2] * q[2] + p[3] * q[3]);
+	const real_t cosom = (p[0] * q[0] + p[1] * q[1] + p[2] * q[2] + p[3] * q[3]);
 
-	if ((1.0 + cosom) > 0.000001)
+	if ((1.0f + cosom) > 0.000001f)
 	{
-		if ((1.0 - cosom) > 0.000001)
+		if ((1.0f - cosom) > 0.000001f)
 		{
-			real_t cosomega = acos(real_t(cosom));
+			const real_t cosomega = acos(real_t(cosom));
 
-			float omega = cosomega;
-			float sinom = sin(cosomega);
+			const float omega = cosomega;
+			const float sinom = sin(cosomega);
 
 			sclp = sin((1.0f - t) * omega) / sinom;
 			sclq = sin(real_t(omega * t)) / sinom;
@@ -312,17 +312,17 @@ void QuaternionSlerp(vec_t* p, vec_t* q, float t, vec_t* qt)
 
 void QuaternionMatrix(vec_t* quaternion, float(*matrix)[4])
 {
-	matrix[0][0] = 1.0 - 2.0 * quaternion[1] * quaternion[1] - 2.0 * quaternion[2] * quaternion[2];
-	matrix[1][0] = 2.0 * quaternion[0] * quaternion[1] + 2.0 * quaternion[3] * quaternion[2];
-	matrix[2][0] = 2.0 * quaternion[0] * quaternion[2] - 2.0 * quaternion[3] * quaternion[1];
+	matrix[0][0] = 1.0f - 2.0f * quaternion[1] * quaternion[1] - 2.0f * quaternion[2] * quaternion[2];
+	matrix[1][0] = 2.0f * quaternion[0] * quaternion[1] + 2.0f * quaternion[3] * quaternion[2];
+	matrix[2][0] = 2.0f * quaternion[0] * quaternion[2] - 2.0f * quaternion[3] * quaternion[1];
 
-	matrix[0][1] = 2.0 * quaternion[0] * quaternion[1] - 2.0 * quaternion[3] * quaternion[2];
-	matrix[1][1] = 1.0 - 2.0 * quaternion[0] * quaternion[0] - 2.0 * quaternion[2] * quaternion[2];
-	matrix[2][1] = 2.0 * quaternion[1] * quaternion[2] + 2.0 * quaternion[3] * quaternion[0];
+	matrix[0][1] = 2.0f * quaternion[0] * quaternion[1] - 2.0f * quaternion[3] * quaternion[2];
+	matrix[1][1] = 1.0f - 2.0f * quaternion[0] * quaternion[0] - 2.0f * quaternion[2] * quaternion[2];
+	matrix[2][1] = 2.0f * quaternion[1] * quaternion[2] + 2.0f * quaternion[3] * quaternion[0];
 
-	matrix[0][2] = 2.0 * quaternion[0] * quaternion[2] + 2.0 * quaternion[3] * quaternion[1];
-	matrix[1][2] = 2.0 * quaternion[1] * quaternion[2] - 2.0 * quaternion[3] * quaternion[0];
-	matrix[2][2] = 1.0 - 2.0 * quaternion[0] * quaternion[0] - 2.0 * quaternion[1] * quaternion[1];
+	matrix[0][2] = 2.0f * quaternion[0] * quaternion[2] + 2.0f * quaternion[3] * quaternion[1];
+	matrix[1][2] = 2.0f * quaternion[1] * quaternion[2] - 2.0f * quaternion[3] * quaternion[0];
+	matrix[2][2] = 1.0f - 2.0f * quaternion[0] * quaternion[0] - 2.0f * quaternion[1] * quaternion[1];
 }
 
 mstudioanim_t* StudioGetAnim(model_t* m_pSubModel, mstudioseqdesc_t* pseqdesc)

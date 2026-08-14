@@ -7,7 +7,7 @@
 cvar_t* sv_unlag;
 cvar_t* sv_maxunlag;
 cvar_t* sv_unlagpush;
-cvar_t hf_hitbox_fix = { "hbf_enabled", "1", FCVAR_SERVER | FCVAR_PROTECTED, 0.0f, NULL };
+cvar_t hf_hitbox_fix = { "hbf_enabled", "1", FCVAR_SERVER | FCVAR_PROTECTED, 0.0f, nullptr};
 cvar_t* phf_hitbox_fix;
 char g_ExecConfigCmd[MAX_PATH];
 std::unique_ptr<players_api> api;
@@ -326,7 +326,7 @@ void StudioEstimateGait(player_anim_params_s& params)
 void StudioPlayerBlend(int* pBlend, float* pPitch)
 {
 	// calc up/down pointing
-	float range = float(int64(*pPitch * 3.0f));
+	const float range = static_cast<float>(int64(*pPitch * 3.0f));
 
 	*pBlend = range;
 
@@ -376,7 +376,7 @@ void CalculateYawBlend(player_anim_params_s& params)
 
 	if (params.m_flGaitMovement)
 	{
-		float maxyaw = 120.0;
+		const float maxyaw = 120.0f;
 		if (flYaw > maxyaw)
 		{
 			params.gaityaw -= 180;
@@ -391,11 +391,11 @@ void CalculateYawBlend(player_anim_params_s& params)
 		}
 	}
 
-	float blend_yaw = (flYaw / 90.0) * 128.0 + 127.0;
+	float blend_yaw = (flYaw / 90.0f) * 128.0f + 127.0f;
 	blend_yaw = clamp<float>(blend_yaw, 0.0f, 255.0f);
-	blend_yaw = 255.0 - blend_yaw;
+	blend_yaw = 255.0f - blend_yaw;
 
-	params.blending[0] = (int)(blend_yaw);
+	params.blending[0] = static_cast<int>(blend_yaw);
 	params.prevblending[0] = params.blending[0];
 	params.prevseqblending[0] = params.blending[0];
 	params.final_angles[1] = params.gaityaw;
@@ -500,7 +500,7 @@ void HL_StudioProcessGait(player_anim_params_s& params)
 	int		iBlend{};
 	float		flYaw; // view direction relative to movement
 
-	auto ent = INDEXENT(params.playerId);
+	const auto ent = INDEXENT(params.playerId);
 	if (!ent)
 	{
 		return;
@@ -649,8 +649,8 @@ qboolean CL_FindInterpolationUpdates(int host, int target, int sequence, float t
 		}
 	}
 
-	if (ph0 != NULL) *ph0 = &player_params_history[host].hist[i0][target];
-	if (ph1 != NULL) *ph1 = &player_params_history[host].hist[i1][target];
+	if (ph0 != nullptr) *ph0 = &player_params_history[host].hist[i0][target];
+	if (ph1 != nullptr) *ph1 = &player_params_history[host].hist[i1][target];
 	
 	return extrapolate;
 }
@@ -710,7 +710,7 @@ float CL_PureOrigin(int host, int target, float t, vec3_t& outorigin, vec3_t& ou
 	vec3_t				pos, angles;
 	if (host)
 	{
-		auto _host_client = api->GetClient(host-1);
+		const auto _host_client = api->GetClient(host-1);
 		CL_FindInterpolationUpdates(host, target, (_host_client->netchan.outgoing_sequence + 1), t, &ph0, &ph1);
 	}
 	else
@@ -756,22 +756,22 @@ float BitAngle(float fAngle, int numbits)
 		return fAngle;
 	}
 
-	unsigned int shift = (1 << numbits);
-	unsigned int mask = shift - 1;
+	const unsigned int shift = (1 << numbits);
+	const unsigned int mask = shift - 1;
 
-	int d = (int)(shift * fmod((double)fAngle, 360.0)) / 360;
+	int d = static_cast<int>(shift * fmod(static_cast<double>(fAngle), 360.0)) / 360;
 	d &= mask;
 
-	float angle =  (float)(d * (360.0 / (1 << numbits)));
+	float angle =  static_cast<float>(d * (360.0 / (1 << numbits)));
 
 
-	if (angle > 180.0)
+	if (angle > 180.0f)
 	{
-		angle -= 360.0;
+		angle -= 360.0f;
 	}
-	else if (angle < -180.0)
+	else if (angle < -180.0f)
 	{
-		angle += 360.0;
+		angle += 360.0f;
 	}
 
 	return angle;
@@ -779,8 +779,8 @@ float BitAngle(float fAngle, int numbits)
 
 float BitTime8(float f2)
 {
-	int32 twVal = (int)(f2 * 100.0);
-	return (float)(twVal / 100.0);
+	const int32 twVal = static_cast<int>(f2 * 100.0f);
+	return twVal / 100.0f;
 }
 
 void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player_anim_params_s& prev_params, entity_state_s* state)
@@ -817,7 +817,7 @@ void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player
 		float t = gpGlobals->time;
 		if (host_id)
 		{	
-			auto _host_client = api->GetClient(host_id - 1);
+			const auto _host_client = api->GetClient(host_id - 1);
 			t -= (_host_client->lastcmd.lerp_msec) * 0.001f;
 		}
 		else
@@ -928,8 +928,8 @@ void PlayerPostThinkPost(edict_t* pEntity)
 int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict_t* host, int hostflags, int player, unsigned char* pSet)
 {
 	int i;
-	auto host_id = ENTINDEX(host);
-	auto _host_client = api->GetClient(host_id-1);
+	const auto host_id = ENTINDEX(host);
+	const auto _host_client = api->GetClient(host_id-1);
 	if (!player || ent == host)
 	{
 		RETURN_META_VALUE(MRES_IGNORED, 0);

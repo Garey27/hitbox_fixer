@@ -6,7 +6,7 @@ IRehldsServerStatic *g_RehldsSvs;
 const RehldsFuncs_t *g_RehldsFuncs;
 bool RehldsApi_TryInit(CSysModule* engineModule, char* failureReason) {
 	if (!engineModule)return false;
-	CreateInterfaceFn ifaceFactory = Sys_GetFactory(engineModule);
+	const CreateInterfaceFn ifaceFactory = Sys_GetFactory(engineModule);
 	if (!ifaceFactory)return false;
 	int retCode = 0;
 	g_RehldsApi = (IRehldsApi*)ifaceFactory(VREHLDS_HLDS_API_VERSION, &retCode);

@@ -32,12 +32,12 @@ C_DLLEXPORT int Meta_Query(char *interfaceVersion, plugin_info_t* *plinfo, mutil
 // Must provide at least one of these..
 META_FUNCTIONS gMetaFunctionTable =
 {
-	NULL,			// pfnGetEntityAPI		HL SDK; called before game DLL
-	NULL,			// pfnGetEntityAPI_Post		META; called after game DLL
+	nullptr,			// pfnGetEntityAPI		HL SDK; called before game DLL
+	nullptr,			// pfnGetEntityAPI_Post		META; called after game DLL
 	GetEntityAPI2_Pre,	// pfnGetEntityAPI2		HL SDK2; called before game DLL
 	GetEntityAPI2_Post,			// pfnGetEntityAPI2_Post	META; called after game DLL
-	NULL,			// pfnGetNewDLLFunctions	HL SDK2; called before game DLL
-	NULL,			// pfnGetNewDLLFunctions_Post	META; called after game DLL
+	nullptr,			// pfnGetNewDLLFunctions	HL SDK2; called before game DLL
+	nullptr,			// pfnGetNewDLLFunctions_Post	META; called after game DLL
 	GetEngineFunctions,			// pfnGetEngineFunctions	META; called before HL engine
 	GetEngineFunctions_Post,			// pfnGetEngineFunctions_Post	META; called after HL engine
 };
