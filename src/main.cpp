@@ -4,10 +4,12 @@
 #define __fastcall
 #endif
 #include <subhook.h>
+
+#include <algorithm>
 cvar_t* sv_unlag;
 cvar_t* sv_maxunlag;
 cvar_t* sv_unlagpush;
-cvar_t hf_hitbox_fix = { "hbf_enabled", "1", FCVAR_SERVER | FCVAR_PROTECTED, 0.0f, NULL };
+cvar_t hf_hitbox_fix = { "hbf_enabled", "1", FCVAR_SERVER | FCVAR_PROTECTED, 0.0f, nullptr};
 cvar_t* phf_hitbox_fix;
 char g_ExecConfigCmd[MAX_PATH];
 std::unique_ptr<players_api> api;
@@ -60,7 +62,7 @@ void (PutInServer)(edict_t* pEntity)
 	{
 		RETURN_META(MRES_IGNORED);
 	}
-	auto host_id = ENTINDEX(pEntity);
+	const auto host_id = ENTINDEX(pEntity);
 	memset(&player_params_history[host_id], 0, sizeof(player_params_history[host_id]));
 	RETURN_META(MRES_IGNORED);
 }
@@ -148,7 +150,7 @@ void (StartFramePost)()
 }
 void (PlayerPreThinkPre)(edict_t* pEntity)
 {
-	auto host_id = ENTINDEX(pEntity);
+	const auto host_id = ENTINDEX(pEntity);
 	auto _host_client = api->GetClient(host_id-1);
 	client_t* cl;
 	float cl_interptime = 0.f;
@@ -315,18 +317,16 @@ void StudioEstimateGait(player_anim_params_s& params)
 	{
 		params.gaityaw = (atan2(est_velocity.y, est_velocity.x) * (180 / M_PI));
 
-		if (params.gaityaw > 180)
-			params.gaityaw = 180;
+		params.gaityaw = std::min<float>(params.gaityaw, 180);
 
-		if (params.gaityaw < -180)
-			params.gaityaw = -180;
+		params.gaityaw = std::max<float>(params.gaityaw, -180);
 	}
 }
 
 void StudioPlayerBlend(int* pBlend, float* pPitch)
 {
 	// calc up/down pointing
-	float range = float(int64(*pPitch * 3.0f));
+	const float range = static_cast<float>(int64(*pPitch * 3.0f));
 
 	*pBlend = range;
 
@@ -376,7 +376,7 @@ void CalculateYawBlend(player_anim_params_s& params)
 
 	if (params.m_flGaitMovement)
 	{
-		float maxyaw = 120.0;
+		const float maxyaw = 120.0f;
 		if (flYaw > maxyaw)
 		{
 			params.gaityaw -= 180;
@@ -391,11 +391,11 @@ void CalculateYawBlend(player_anim_params_s& params)
 		}
 	}
 
-	float blend_yaw = (flYaw / 90.0) * 128.0 + 127.0;
+	float blend_yaw = (flYaw / 90.0f) * 128.0f + 127.0f;
 	blend_yaw = clamp<float>(blend_yaw, 0.0f, 255.0f);
-	blend_yaw = 255.0 - blend_yaw;
+	blend_yaw = 255.0f - blend_yaw;
 
-	params.blending[0] = (int)(blend_yaw);
+	params.blending[0] = static_cast<int>(blend_yaw);
 	params.prevblending[0] = params.blending[0];
 	params.prevseqblending[0] = params.blending[0];
 	params.final_angles[1] = params.gaityaw;
@@ -445,10 +445,10 @@ void HL_StudioEstimateGait(player_anim_params_s& params)
 	vec3_t	est_velocity;
 	float dt = params.m_clTime - params.m_clOldTime;
 
-	if (dt < 0.0)
+	if (dt < 0.0f)
 		dt = 0;
 
-	else if (dt > 1.0)
+	else if (dt > 1.0f)
 		dt = 1;
 
 
@@ -476,15 +476,15 @@ void HL_StudioEstimateGait(player_anim_params_s& params)
 		else flYawDiff *= dt;
 
 		params.gaityaw += flYawDiff;
-		params.gaityaw = params.gaityaw - (int)(params.gaityaw / 360) * 360;
+		params.gaityaw = params.gaityaw - static_cast<int>(params.gaityaw / 360) * 360;
 
 		params.m_flGaitMovement = 0.0f;
 	}
 	else
 	{
 		params.gaityaw = (atan2(est_velocity[1], est_velocity[0]) * 180 / M_PI);
-		if (params.gaityaw > 180.0f) params.gaityaw = 180.0f;
-		if (params.gaityaw < -180.0f) params.gaityaw = -180.0f;
+		params.gaityaw = std::min<float>(params.gaityaw, 180.0f);
+		params.gaityaw = std::max<float>(params.gaityaw, -180.0f);
 	}
 
 }
@@ -500,7 +500,7 @@ void HL_StudioProcessGait(player_anim_params_s& params)
 	int		iBlend{};
 	float		flYaw; // view direction relative to movement
 
-	auto ent = INDEXENT(params.playerId);
+	const auto ent = INDEXENT(params.playerId);
 	if (!ent)
 	{
 		return;
@@ -519,10 +519,10 @@ void HL_StudioProcessGait(player_anim_params_s& params)
 
 	float dt = params.m_clTime - params.m_clOldTime;
 
-	if (dt < 0.0)
+	if (dt < 0.0f)
 		dt = 0;
 
-	else if (dt > 1.0)
+	else if (dt > 1.0f)
 		dt = 1;
 
 	pseqdesc = (mstudioseqdesc_t*)((byte*)g_pstudiohdr + g_pstudiohdr->seqindex) + params.sequence;
@@ -538,7 +538,7 @@ void HL_StudioProcessGait(player_anim_params_s& params)
 
 	// calc side to side turning
 	flYaw = params.final_angles[1] - params.gaityaw;
-	flYaw = flYaw - (int)(flYaw / 360) * 360;
+	flYaw = flYaw - static_cast<int>(flYaw / 360) * 360;
 	if (flYaw < -180.0f) flYaw = flYaw + 360.0f;
 	if (flYaw > 180.0f) flYaw = flYaw - 360.0f;
 
@@ -580,7 +580,7 @@ void HL_StudioProcessGait(player_anim_params_s& params)
 	else params.gaitframe += pseqdesc->fps * dt;
 
 	// do modulo
-	params.gaitframe = params.gaitframe - (int)(params.gaitframe / pseqdesc->numframes) * pseqdesc->numframes;
+	params.gaitframe = params.gaitframe - static_cast<int>(params.gaitframe / pseqdesc->numframes) * pseqdesc->numframes;
 	if (params.gaitframe < 0) params.gaitframe += pseqdesc->numframes;
 }
 
@@ -590,15 +590,15 @@ void StudioProcessGait(player_anim_params_s& params)
 	mstudioseqdesc_t* pseqdesc;
 	float dt = params.m_clTime - params.m_clOldTime;
 
-	if (dt < 0.0)
+	if (dt < 0.0f)
 		dt = 0;
 
-	else if (dt > 1.0)
+	else if (dt > 1.0f)
 		dt = 1;
 
 	CalculateYawBlend(params);
 	CalculatePitchBlend(params);
-	auto ent = INDEXENT(params.playerId);
+	const auto ent = INDEXENT(params.playerId);
 	if (!ent)
 	{
 		return;
@@ -649,8 +649,8 @@ qboolean CL_FindInterpolationUpdates(int host, int target, int sequence, float t
 		}
 	}
 
-	if (ph0 != NULL) *ph0 = &player_params_history[host].hist[i0][target];
-	if (ph1 != NULL) *ph1 = &player_params_history[host].hist[i1][target];
+	if (ph0 != nullptr) *ph0 = &player_params_history[host].hist[i0][target];
+	if (ph1 != nullptr) *ph1 = &player_params_history[host].hist[i1][target];
 	
 	return extrapolate;
 }
@@ -661,13 +661,13 @@ void NormalizeAngles(vec3_t& angles)
 	// Normalize angles
 	for (i = 0; i < 3; i++)
 	{
-		if (angles[i] > 180.0)
+		if (angles[i] > 180.0f)
 		{
-			angles[i] -= 360.0;
+			angles[i] -= 360.0f;
 		}
-		else if (angles[i] < -180.0)
+		else if (angles[i] < -180.0f)
 		{
-			angles[i] += 360.0;
+			angles[i] += 360.0f;
 		}
 	}
 }
@@ -710,7 +710,7 @@ float CL_PureOrigin(int host, int target, float t, vec3_t& outorigin, vec3_t& ou
 	vec3_t				pos, angles;
 	if (host)
 	{
-		auto _host_client = api->GetClient(host-1);
+		const auto _host_client = api->GetClient(host-1);
 		CL_FindInterpolationUpdates(host, target, (_host_client->netchan.outgoing_sequence + 1), t, &ph0, &ph1);
 	}
 	else
@@ -731,7 +731,7 @@ float CL_PureOrigin(int host, int target, float t, vec3_t& outorigin, vec3_t& ou
 
 #define bound( min, num, max )	((num) >= (min) ? ((num) < (max) ? (num) : (max)) : (min))
 		if (t0 != t1)
-			frac = bound(0, (t - t1) / (t0 - t1), 1.2);
+			frac = bound(0, (t - t1) / (t0 - t1), 1.2f);
 		else
 			frac = 1.0f;
 		//frac = (t - t1) / (t0 - t1);
@@ -756,22 +756,22 @@ float BitAngle(float fAngle, int numbits)
 		return fAngle;
 	}
 
-	unsigned int shift = (1 << numbits);
-	unsigned int mask = shift - 1;
+	const unsigned int shift = (1 << numbits);
+	const unsigned int mask = shift - 1;
 
-	int d = (int)(shift * fmod((double)fAngle, 360.0)) / 360;
+	int d = static_cast<int>(shift * fmod(static_cast<double>(fAngle), 360.0f)) / 360;
 	d &= mask;
 
-	float angle =  (float)(d * (360.0 / (1 << numbits)));
+	float angle =  static_cast<float>(d * (360.0f / (1 << numbits)));
 
 
-	if (angle > 180.0)
+	if (angle > 180.0f)
 	{
-		angle -= 360.0;
+		angle -= 360.0f;
 	}
-	else if (angle < -180.0)
+	else if (angle < -180.0f)
 	{
-		angle += 360.0;
+		angle += 360.0f;
 	}
 
 	return angle;
@@ -779,8 +779,8 @@ float BitAngle(float fAngle, int numbits)
 
 float BitTime8(float f2)
 {
-	int32 twVal = (int)(f2 * 100.0);
-	return (float)(twVal / 100.0);
+	const int32 twVal = static_cast<int>(f2 * 100.0f);
+	return twVal / 100.0f;
 }
 
 void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player_anim_params_s& prev_params, entity_state_s* state)
@@ -817,7 +817,7 @@ void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player
 		float t = gpGlobals->time;
 		if (host_id)
 		{	
-			auto _host_client = api->GetClient(host_id - 1);
+			const auto _host_client = api->GetClient(host_id - 1);
 			t -= (_host_client->lastcmd.lerp_msec) * 0.001f;
 		}
 		else
@@ -832,8 +832,7 @@ void ProcessAnimParams(int id, int host_id, player_anim_params_s& params, player
 		params.prevframe = prev_params.f;
 		params.prevsequence = prev_params.sequence;
 
-		if (params.sequence < 0)
-			params.sequence = 0;
+		params.sequence = std::max(params.sequence, 0);
 
 		// sequence has changed, hold the previous sequence info
 		if (params.sequence != params.prevsequence)
@@ -928,8 +927,8 @@ void PlayerPostThinkPost(edict_t* pEntity)
 int	(AddToFullPackPost)(struct entity_state_s* state, int e, edict_t* ent, edict_t* host, int hostflags, int player, unsigned char* pSet)
 {
 	int i;
-	auto host_id = ENTINDEX(host);
-	auto _host_client = api->GetClient(host_id-1);
+	const auto host_id = ENTINDEX(host);
+	const auto _host_client = api->GetClient(host_id-1);
 	if (!player || ent == host)
 	{
 		RETURN_META_VALUE(MRES_IGNORED, 0);
@@ -1102,6 +1101,18 @@ bool OnMetaAttach()
 
 	if (g_eGameType == GT_Unitialized)
 	{
+		if (!strcmp(a, "action"))
+		{
+			game_library = "ahl.dll";
+			linux_game_library = "ahl_i386.so";
+			g_eGameType = GT_HL1;
+		}
+		if (!strcmp(a, "ts"))
+		{
+			game_library = "ts.dll";
+			linux_game_library = "ts_i686.so";
+			g_eGameType = GT_HL1;
+		}
 		if (!strcmp(a, "valve"))
 		{
 			game_library = "hl.dll";

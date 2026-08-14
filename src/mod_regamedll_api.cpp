@@ -17,7 +17,7 @@ bool RegamedllApi_Init()
 		return false;
 	}
 
-	CreateInterfaceFn ifaceFactory = Sys_GetFactory(gameModule);
+	const CreateInterfaceFn ifaceFactory = Sys_GetFactory(gameModule);
 	if (!ifaceFactory)
 	{
 		return false;
@@ -31,8 +31,8 @@ bool RegamedllApi_Init()
 		return false;
 	}
 
-	int majorVersion = g_ReGameApi->GetMajorVersion();
-	int minorVersion = g_ReGameApi->GetMinorVersion();
+	const int majorVersion = g_ReGameApi->GetMajorVersion();
+	const int minorVersion = g_ReGameApi->GetMinorVersion();
 
 	if (majorVersion != REGAMEDLL_API_VERSION_MAJOR)
 	{
