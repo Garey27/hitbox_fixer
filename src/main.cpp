@@ -1102,6 +1102,18 @@ bool OnMetaAttach()
 
 	if (g_eGameType == GT_Unitialized)
 	{
+		if (!strcmp(a, "action"))
+		{
+			game_library = "ahl.dll";
+			linux_game_library = "ahl_i386.so";
+			g_eGameType = GT_HL1;
+		}
+		if (!strcmp(a, "ts"))
+		{
+			game_library = "ts.dll";
+			linux_game_library = "ts_i686.so";
+			g_eGameType = GT_HL1;
+		}
 		if (!strcmp(a, "valve"))
 		{
 			game_library = "hl.dll";
